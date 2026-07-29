@@ -3,22 +3,14 @@ variable "environment" {
   type        = string
 }
 
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
 variable "vpc_id" {
   description = "VPC id from repo-k8s-infra output"
   type        = string
-  default     = null
 }
 
 variable "private_subnet_ids" {
   description = "Private subnet ids from repo-k8s-infra output"
   type        = list(string)
-  default     = []
 }
 
 variable "db_password" {
@@ -31,4 +23,16 @@ variable "allowed_security_group_ids" {
   description = "Security groups (e.g. EKS nodes) allowed to reach the database on 5432"
   type        = list(string)
   default     = []
+}
+
+variable "instance_class" {
+  description = "RDS instance class"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "allocated_storage" {
+  description = "Allocated storage in GB"
+  type        = number
+  default     = 20
 }

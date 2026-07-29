@@ -10,4 +10,12 @@ provider "aws" {
   }
 }
 
-# TODO: wire modules/rds once database engine/version is approved (HANDOFF.md decision #6).
+module "rds" {
+  source = "./modules/rds"
+
+  environment                = var.environment
+  vpc_id                     = var.vpc_id
+  private_subnet_ids         = var.private_subnet_ids
+  db_password                = var.db_password
+  allowed_security_group_ids = var.allowed_security_group_ids
+}
