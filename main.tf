@@ -16,6 +16,5 @@ module "rds" {
   environment                = var.environment
   vpc_id                     = var.vpc_id
   private_subnet_ids         = var.private_subnet_ids
-  db_password                = var.db_password
   allowed_security_group_ids = var.allowed_security_group_ids
 }

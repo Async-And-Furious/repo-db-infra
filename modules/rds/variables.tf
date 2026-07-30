@@ -1,6 +1,10 @@
 variable "environment" {
   description = "Environment name (hml or prod)"
   type        = string
+  validation {
+    condition     = contains(["hml", "prod"], var.environment)
+    error_message = "environment must be exactly \"hml\" or \"prod\" — prod-only protections (multi_az, deletion_protection, final snapshot) are gated on this string matching exactly."
+  }
 }
 
 variable "vpc_id" {
@@ -11,12 +15,6 @@ variable "vpc_id" {
 variable "private_subnet_ids" {
   description = "Private subnet ids from repo-k8s-infra output"
   type        = list(string)
-}
-
-variable "db_password" {
-  description = "Master password for the RDS instance"
-  type        = string
-  sensitive   = true
 }
 
 variable "allowed_security_group_ids" {

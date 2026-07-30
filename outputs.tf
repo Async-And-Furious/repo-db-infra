@@ -14,5 +14,6 @@ output "db_security_group_id" {
   value = module.rds.db_security_group_id
 }
 
-# db_secret_arn: pending RFC-006 (secrets strategy) — db_password is currently
-# injected via TF_VAR_db_password (CI secret), not stored in Secrets Manager.
+output "db_secret_arn" {
+  value = module.rds.master_user_secret_arn
+}

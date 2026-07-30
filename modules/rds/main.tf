@@ -35,15 +35,21 @@ resource "aws_db_instance" "this" {
 
   db_name  = "workshop"
   username = "postgres"
-  password = var.db_password
+  # RDS-managed master password (Secrets Manager), never in Terraform state.
+  manage_master_user_password = true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [aws_security_group.db.id]
 
-  backup_retention_period    = var.environment == "prod" ? 7 : 1
+  backup_retention_period    = local.is_prod ? 7 : 1
   auto_minor_version_upgrade = true
-  multi_az                   = var.environment == "prod"
+  multi_az                   = local.is_prod
 
-  skip_final_snapshot = var.environment != "prod"
-  deletion_protection = var.environment == "prod"
+  skip_final_snapshot       = !local.is_prod
+  final_snapshot_identifier = local.is_prod ? "tc3-db-${var.environment}-final" : null
+  deletion_protection       = local.is_prod
+}
+
+locals {
+  is_prod = var.environment == "prod"
 }
