@@ -22,6 +22,13 @@ resource "aws_security_group" "db" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  lifecycle {
+    precondition {
+      condition     = length(var.allowed_security_group_ids) > 0
+      error_message = "At least one consumer security group must be allowed to reach PostgreSQL."
+    }
+  }
 }
 
 resource "aws_db_instance" "this" {
@@ -29,9 +36,10 @@ resource "aws_db_instance" "this" {
   engine         = "postgres"
   engine_version = "16.4"
 
-  instance_class    = var.instance_class
-  allocated_storage = var.allocated_storage
-  storage_encrypted = true
+  instance_class      = var.instance_class
+  allocated_storage   = var.allocated_storage
+  storage_encrypted   = true
+  publicly_accessible = false
 
   db_name  = "workshop"
   username = "postgres"
@@ -48,6 +56,7 @@ resource "aws_db_instance" "this" {
   skip_final_snapshot       = !local.is_prod
   final_snapshot_identifier = local.is_prod ? "tc3-db-${var.environment}-final" : null
   deletion_protection       = local.is_prod
+  copy_tags_to_snapshot     = true
 }
 
 locals {

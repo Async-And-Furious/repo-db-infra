@@ -8,6 +8,4 @@ terraform {
     }
   }
 
-  # TODO: configure remote state backend (S3 + DynamoDB lock) once bucket/table are approved.
-  # backend "s3" {}
 }

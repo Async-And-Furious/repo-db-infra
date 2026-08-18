@@ -26,7 +26,7 @@ data "terraform_remote_state" "k8s_infra" {
 locals {
   vpc_id                     = coalesce(var.vpc_id, data.terraform_remote_state.k8s_infra.outputs.vpc_id)
   private_subnet_ids         = length(var.private_subnet_ids) > 0 ? var.private_subnet_ids : data.terraform_remote_state.k8s_infra.outputs.private_subnet_ids
-  allowed_security_group_ids = concat(var.allowed_security_group_ids, [data.terraform_remote_state.k8s_infra.outputs.node_security_group_id])
+  allowed_security_group_ids = distinct(concat(var.allowed_security_group_ids, var.lambda_security_group_ids, [data.terraform_remote_state.k8s_infra.outputs.node_security_group_id]))
 }
 
 module "rds" {
