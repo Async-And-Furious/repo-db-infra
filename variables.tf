@@ -20,3 +20,26 @@ variable "private_subnet_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "db_name" {
+  description = "Name of the default database created on the RDS instance"
+  type        = string
+}
+
+variable "db_username" {
+  description = "Master username for the RDS instance"
+  type        = string
+}
+
+variable "db_password" {
+  description = "Master password for the RDS instance (pass via .tfvars or CI secret, never commit)"
+  type        = string
+  sensitive   = true
+}
+
+variable "allowed_cidr_blocks" {
+  description = "CIDR blocks allowed to connect to Postgres (port 5432). Never default to 0.0.0.0/0."
+  type        = list(string)
+  default     = []
+}
+
