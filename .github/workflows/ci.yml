@@ -5,77 +5,131 @@ on:
   push:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Terraform environment
+        required: true
+        default: hml
+        type: choice
+        options: [hml, prod]
+      action:
+        description: Terraform operation
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
 
 permissions:
-  id-token: write
   contents: read
+
+concurrency:
+  group: terraform-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.environment || 'hml' }}
+  cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
-  TF_WORKING_DIR: environments/hml
+  TF_ENVIRONMENT: ${{ inputs.environment || 'hml' }}
 
 jobs:
   validate:
     name: Format & Validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
       - run: terraform fmt -check -recursive
-      - name: Terraform Init (no backend)
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init -backend=false
-      - name: Terraform Validate
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform validate
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
 
   plan:
     name: Terraform Plan
     needs: validate
+    # Never expose credentials to a pull request from a fork.
+    if: >-
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository) ||
+      github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - name: Configure AWS credentials
+      - name: Reject partial temporary credentials
+        if: >-
+          (env.AWS_ACCESS_KEY_ID != '' || env.AWS_SECRET_ACCESS_KEY != '' || env.AWS_SESSION_TOKEN != '') &&
+          !(env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != '')
+        run: exit 1
+      - name: Configure AWS credentials (temporary)
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC)
+        if: env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform Init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform plan -out=tfplan
-      - name: Upload Plan
+      - run: terraform init -backend-config=environments/${{ env.TF_ENVIRONMENT }}/backend.hcl -input=false
+      - run: terraform plan -input=false -var=environment=${{ env.TF_ENVIRONMENT }} -out=tfplan
+      - name: Upload sensitive plan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan
-          path: ${{ env.TF_WORKING_DIR }}/tfplan
-          retention-days: 7
+          name: tfplan-${{ env.TF_ENVIRONMENT }}-${{ github.run_id }}
+          path: tfplan
+          if-no-files-found: error
+          retention-days: 1
 
   apply:
     name: Terraform Apply
     needs: plan
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
     runs-on: ubuntu-latest
-    environment: hml-apply
+    # Configure required reviewers on both environments; prod must be protected.
+    environment: ${{ inputs.environment }}-apply
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - name: Configure AWS credentials
+      - name: Reject partial temporary credentials
+        if: >-
+          (env.AWS_ACCESS_KEY_ID != '' || env.AWS_SECRET_ACCESS_KEY != '' || env.AWS_SESSION_TOKEN != '') &&
+          !(env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != '')
+        run: exit 1
+      - name: Configure AWS credentials (temporary)
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC)
+        if: env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform Init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
-      - name: Download Plan
-        uses: actions/download-artifact@v4
+      - run: terraform init -backend-config=environments/${{ env.TF_ENVIRONMENT }}/backend.hcl -input=false
+      - uses: actions/download-artifact@v4
         with:
-          name: tfplan
-          path: ${{ env.TF_WORKING_DIR }}
-      - name: Terraform Apply
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform apply -auto-approve tfplan
+          name: tfplan-${{ env.TF_ENVIRONMENT }}-${{ github.run_id }}
+      - run: terraform apply -input=false -auto-approve tfplan

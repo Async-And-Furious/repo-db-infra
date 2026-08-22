@@ -30,3 +30,9 @@ variable "allowed_security_group_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "lambda_security_group_ids" {
+  description = "Security groups used by VPC Lambdas that need PostgreSQL access"
+  type        = list(string)
+  default     = []
+}
