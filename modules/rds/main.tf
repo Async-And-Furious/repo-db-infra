@@ -17,10 +17,12 @@ resource "aws_security_group" "db" {
   }
 
   egress {
+    # PostgreSQL replies use stateful return traffic; this database has no
+    # outbound dependency and therefore needs no permitted egress destinations.
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = []
   }
 
   lifecycle {
