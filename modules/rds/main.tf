@@ -57,6 +57,13 @@ resource "aws_db_instance" "this" {
   final_snapshot_identifier = local.is_prod ? "tc3-db-${var.environment}-final" : null
   deletion_protection       = local.is_prod
   copy_tags_to_snapshot     = true
+
+  lifecycle {
+    postcondition {
+      condition     = self.publicly_accessible == false
+      error_message = "The database must remain private; publicly_accessible cannot be enabled."
+    }
+  }
 }
 
 locals {

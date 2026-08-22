@@ -10,18 +10,22 @@ Out of scope: business migrations, parallel VPC, plaintext credentials in output
 
 ## Status
 
-Skeleton only. No `terraform apply` has been run. Module pending engine/version decision (HANDOFF.md decision #6).
+The RDS module is configured for a private PostgreSQL 16 instance with encrypted,
+RDS-managed credentials and security-group-only ingress. No `terraform apply` has
+been run. Consumer wiring (secret retrieval and network access from EKS/Lambda)
+and monitoring thresholds/alarms remain to be defined by the consuming teams.
 
 ## Usage
 
 ```bash
 terraform fmt -check -recursive
-terraform init -backend-config=environments/hml/backend.hcl
+terraform init -backend=false -input=false
 terraform validate
 ```
 
-Use `environments/prod/backend.hcl` for production state instead. CI selects
-the environment and backend key through the workflow input.
+Use the environment backend configuration only for an approved plan/apply. CI
+selects the environment and backend key through the workflow input; fork pull
+requests do not receive cloud credentials.
 
 ## CI AWS credentials
 

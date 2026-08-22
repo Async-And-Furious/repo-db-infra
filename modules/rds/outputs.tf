@@ -17,6 +17,7 @@ output "db_security_group_id" {
 output "master_user_secret_arn" {
   description = "Secrets Manager ARN holding the RDS-managed master credentials"
   value       = aws_db_instance.this.master_user_secret[0].secret_arn
+  sensitive   = true
 }
 
 output "connection_contract" {
@@ -28,4 +29,5 @@ output "connection_contract" {
     secret_arn        = aws_db_instance.this.master_user_secret[0].secret_arn
     security_group_id = aws_security_group.db.id
   }
+  sensitive = true
 }
