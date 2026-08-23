@@ -52,6 +52,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository) ||
       github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'hml' }}-plan
     permissions:
       contents: read
       id-token: write
@@ -59,6 +60,17 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      TF_VAR_hml_public_subnet_ids: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}
+      TF_VAR_hml_allowed_cidr_blocks: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}
+      TF_VAR_prod_private_subnet_ids: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}
+      TF_VAR_prod_allowed_security_group_ids: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}
+      TF_VAR_prod_lambda_security_group_ids: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}
+      TF_VAR_alarm_cpu_threshold: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}
+      TF_VAR_alarm_free_storage_threshold_bytes: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}
+      TF_VAR_alarm_connections_threshold: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}
+      TF_VAR_alarm_actions: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
+      TF_VAR_alarm_ok_actions: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
+      TF_VAR_final_snapshot_revision: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -67,6 +79,19 @@ jobs:
           (env.AWS_ACCESS_KEY_ID != '' || env.AWS_SECRET_ACCESS_KEY != '' || env.AWS_SESSION_TOKEN != '') &&
           !(env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != '')
         run: exit 1
+      - name: Fail closed on environment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(TF_VAR_alarm_cpu_threshold TF_VAR_alarm_free_storage_threshold_bytes TF_VAR_alarm_connections_threshold TF_VAR_alarm_actions TF_VAR_alarm_ok_actions TF_VAR_final_snapshot_revision)
+          if [[ "$TF_ENVIRONMENT" == hml ]]; then
+            required+=(TF_VAR_hml_public_subnet_ids TF_VAR_hml_allowed_cidr_blocks)
+            [[ -z "${TF_VAR_prod_private_subnet_ids}" && -z "${TF_VAR_prod_allowed_security_group_ids}" && -z "${TF_VAR_prod_lambda_security_group_ids}" ]] || { echo 'PROD inputs must not be supplied to HML'; exit 1; }
+          else
+            required+=(TF_VAR_prod_private_subnet_ids TF_VAR_prod_allowed_security_group_ids TF_VAR_prod_lambda_security_group_ids)
+            [[ -z "${TF_VAR_hml_public_subnet_ids}" && -z "${TF_VAR_hml_allowed_cidr_blocks}" ]] || { echo 'HML inputs must not be supplied to PROD'; exit 1; }
+          fi
+          for name in "${required[@]}"; do [[ -n "${!name}" ]] || { echo "Missing required environment value: $name"; exit 1; }; done
       - name: Configure AWS credentials (temporary)
         if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -106,6 +131,17 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      TF_VAR_hml_public_subnet_ids: ${{ inputs.environment == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}
+      TF_VAR_hml_allowed_cidr_blocks: ${{ inputs.environment == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}
+      TF_VAR_prod_private_subnet_ids: ${{ inputs.environment == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}
+      TF_VAR_prod_allowed_security_group_ids: ${{ inputs.environment == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}
+      TF_VAR_prod_lambda_security_group_ids: ${{ inputs.environment == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}
+      TF_VAR_alarm_cpu_threshold: ${{ inputs.environment == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}
+      TF_VAR_alarm_free_storage_threshold_bytes: ${{ inputs.environment == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}
+      TF_VAR_alarm_connections_threshold: ${{ inputs.environment == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}
+      TF_VAR_alarm_actions: ${{ inputs.environment == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
+      TF_VAR_alarm_ok_actions: ${{ inputs.environment == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
+      TF_VAR_final_snapshot_revision: ${{ inputs.environment == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -114,6 +150,19 @@ jobs:
           (env.AWS_ACCESS_KEY_ID != '' || env.AWS_SECRET_ACCESS_KEY != '' || env.AWS_SESSION_TOKEN != '') &&
           !(env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != '')
         run: exit 1
+      - name: Fail closed on environment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(TF_VAR_alarm_cpu_threshold TF_VAR_alarm_free_storage_threshold_bytes TF_VAR_alarm_connections_threshold TF_VAR_alarm_actions TF_VAR_alarm_ok_actions TF_VAR_final_snapshot_revision)
+          if [[ "${TF_ENVIRONMENT}" == hml ]]; then
+            required+=(TF_VAR_hml_public_subnet_ids TF_VAR_hml_allowed_cidr_blocks)
+            [[ -z "${TF_VAR_prod_private_subnet_ids}" && -z "${TF_VAR_prod_allowed_security_group_ids}" && -z "${TF_VAR_prod_lambda_security_group_ids}" ]] || { echo 'PROD inputs must not be supplied to HML'; exit 1; }
+          else
+            required+=(TF_VAR_prod_private_subnet_ids TF_VAR_prod_allowed_security_group_ids TF_VAR_prod_lambda_security_group_ids)
+            [[ -z "${TF_VAR_hml_public_subnet_ids}" && -z "${TF_VAR_hml_allowed_cidr_blocks}" ]] || { echo 'HML inputs must not be supplied to PROD'; exit 1; }
+          fi
+          for name in "${required[@]}"; do [[ -n "${!name}" ]] || { echo "Missing required environment value: $name"; exit 1; }; done
       - name: Configure AWS credentials (temporary)
         if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
