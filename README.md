@@ -32,8 +32,6 @@ HCP Terraform state, AWS access, and an already-applied `repo-k8s-infra` state:
 
 ```bash
 terraform init -reconfigure \
-  -backend-config=organization=async_furious \
-  -backend-config=workspaces.name=tc3-db-hml \
   -input=false
 terraform plan -input=false -var=environment=hml -out=tfplan
 ```
@@ -50,8 +48,9 @@ workspaces for local execution (HCP stores state; GitHub runners execute
 Terraform). The existing HML workspace is `tc3-db-hml`.
 
 For the one-time migration, initialize against the old S3 configuration with
-`-migrate-state`, then reinitialize with the HCP backend above. Verify the HCP
-state before deleting the old S3 state.
+`-migrate-state`, then reinitialize with `terraform init -reconfigure -input=false`.
+The HML root backend is pinned to `tc3-db-hml`; verify the HCP state before
+deleting the old S3 state.
 
 The workflow's required `validate` job is credential-free. Plans from forked
 pull requests are skipped. CI accepts all three AWS Academy temporary

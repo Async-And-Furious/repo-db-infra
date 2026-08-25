@@ -31,3 +31,8 @@
   `tc3-db-hml` and `tc3-db-prod` with local execution. Updated CI token/backend
   configuration and documented the controlled state migration; no apply,
   commit, or push was performed.
+
+## 2026-08-24 HCP backend correction
+
+- Configured the root remote backend for the HML workspace and removed invalid
+  remote backend CLI overrides from CI and migration documentation.
