@@ -33,8 +33,11 @@ HCP Terraform state, AWS access, and an already-applied `repo-k8s-infra` state:
 ```bash
 terraform init -reconfigure \
   -input=false
-terraform plan -input=false -var=environment=hml -out=tfplan
+terraform plan -input=false
 ```
+
+CI writes the environment-scoped inputs to a temporary
+`terraform.auto.tfvars.json` before planning or applying.
 
 Use `tc3-db-prod` and `environment=prod` for production. Set
 `TF_TOKEN_app_terraform_io` from the `TF_API_TOKEN` secret for HCP Terraform

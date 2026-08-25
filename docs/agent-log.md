@@ -36,3 +36,10 @@
 
 - Configured the root remote backend for the HML workspace and removed invalid
   remote backend CLI overrides from CI and migration documentation.
+
+## 2026-08-24 Remote local execution
+
+- Updated plan/apply CI jobs to generate temporary auto tfvars JSON, run plans
+  without `-out`, and apply directly; removed plan artifacts. No apply was run.
+- Validation used Terraform formatting, backend-free init/validate, workflow YAML
+  parsing, and `git diff --check`.

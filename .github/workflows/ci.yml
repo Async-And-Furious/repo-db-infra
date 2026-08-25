@@ -60,17 +60,6 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      TF_VAR_hml_public_subnet_ids: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}
-      TF_VAR_hml_allowed_cidr_blocks: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}
-      TF_VAR_prod_private_subnet_ids: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}
-      TF_VAR_prod_allowed_security_group_ids: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}
-      TF_VAR_prod_lambda_security_group_ids: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}
-      TF_VAR_alarm_cpu_threshold: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}
-      TF_VAR_alarm_free_storage_threshold_bytes: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}
-      TF_VAR_alarm_connections_threshold: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}
-      TF_VAR_alarm_actions: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
-      TF_VAR_alarm_ok_actions: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
-      TF_VAR_final_snapshot_revision: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -84,15 +73,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          required=(TF_VAR_alarm_cpu_threshold TF_VAR_alarm_free_storage_threshold_bytes TF_VAR_alarm_connections_threshold TF_VAR_alarm_actions TF_VAR_alarm_ok_actions TF_VAR_final_snapshot_revision)
+          hml_public_subnet_ids='${{ (inputs.environment || 'hml') == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}'
+          hml_allowed_cidr_blocks='${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}'
+          prod_private_subnet_ids='${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}'
+          prod_allowed_security_group_ids='${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}'
+          prod_lambda_security_group_ids='${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}'
+          alarm_cpu_threshold='${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}'
+          alarm_free_storage_threshold_bytes='${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}'
+          alarm_connections_threshold='${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}'
+          alarm_actions='${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}'
+          alarm_ok_actions='${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}'
+          final_snapshot_revision='${{ (inputs.environment || 'hml') == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}'
+          required=(alarm_cpu_threshold alarm_free_storage_threshold_bytes alarm_connections_threshold alarm_actions alarm_ok_actions final_snapshot_revision)
           if [[ "$TF_ENVIRONMENT" == hml ]]; then
-            required+=(TF_VAR_hml_public_subnet_ids TF_VAR_hml_allowed_cidr_blocks)
-            [[ -z "${TF_VAR_prod_private_subnet_ids}" && -z "${TF_VAR_prod_allowed_security_group_ids}" && -z "${TF_VAR_prod_lambda_security_group_ids}" ]] || { echo 'PROD inputs must not be supplied to HML'; exit 1; }
+            required+=(hml_public_subnet_ids hml_allowed_cidr_blocks)
+            [[ -z "$prod_private_subnet_ids" && -z "$prod_allowed_security_group_ids" && -z "$prod_lambda_security_group_ids" ]] || { echo 'PROD inputs must not be supplied to HML'; exit 1; }
           else
-            required+=(TF_VAR_prod_private_subnet_ids TF_VAR_prod_allowed_security_group_ids TF_VAR_prod_lambda_security_group_ids)
-            [[ -z "${TF_VAR_hml_public_subnet_ids}" && -z "${TF_VAR_hml_allowed_cidr_blocks}" ]] || { echo 'HML inputs must not be supplied to PROD'; exit 1; }
+            required+=(prod_private_subnet_ids prod_allowed_security_group_ids prod_lambda_security_group_ids)
+            [[ -z "$hml_public_subnet_ids" && -z "$hml_allowed_cidr_blocks" ]] || { echo 'HML inputs must not be supplied to PROD'; exit 1; }
           fi
           for name in "${required[@]}"; do [[ -n "${!name}" ]] || { echo "Missing required environment value: $name"; exit 1; }; done
+          jq -n \
+            --arg environment "$TF_ENVIRONMENT" \
+            --argjson hml_public_subnet_ids "${hml_public_subnet_ids:-[]}" \
+            --argjson hml_allowed_cidr_blocks "${hml_allowed_cidr_blocks:-[]}" \
+            --argjson prod_private_subnet_ids "${prod_private_subnet_ids:-[]}" \
+            --argjson prod_allowed_security_group_ids "${prod_allowed_security_group_ids:-[]}" \
+            --argjson prod_lambda_security_group_ids "${prod_lambda_security_group_ids:-[]}" \
+            --argjson alarm_cpu_threshold "$alarm_cpu_threshold" \
+            --argjson alarm_free_storage_threshold_bytes "$alarm_free_storage_threshold_bytes" \
+            --argjson alarm_connections_threshold "$alarm_connections_threshold" \
+            --argjson alarm_actions "$alarm_actions" \
+            --argjson alarm_ok_actions "$alarm_ok_actions" \
+            --arg final_snapshot_revision "$final_snapshot_revision" \
+            '{environment: $environment, hml_public_subnet_ids: $hml_public_subnet_ids, hml_allowed_cidr_blocks: $hml_allowed_cidr_blocks, prod_private_subnet_ids: $prod_private_subnet_ids, prod_allowed_security_group_ids: $prod_allowed_security_group_ids, prod_lambda_security_group_ids: $prod_lambda_security_group_ids, alarm_cpu_threshold: $alarm_cpu_threshold, alarm_free_storage_threshold_bytes: $alarm_free_storage_threshold_bytes, alarm_connections_threshold: $alarm_connections_threshold, alarm_actions: $alarm_actions, alarm_ok_actions: $alarm_ok_actions, final_snapshot_revision: $final_snapshot_revision}' \
+            > terraform.auto.tfvars.json
       - name: Configure AWS credentials (temporary)
         if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -108,14 +123,11 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - run: terraform init -reconfigure -input=false
-      - run: terraform plan -input=false -var=environment=${{ env.TF_ENVIRONMENT }} -out=tfplan
-      - name: Upload sensitive plan artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ env.TF_ENVIRONMENT }}-${{ github.run_id }}
-          path: tfplan
-          if-no-files-found: error
-          retention-days: 1
+      - run: terraform plan -input=false
+      - name: Remove temporary Terraform variables
+        if: always()
+        run: Remove-Item -LiteralPath terraform.auto.tfvars.json -Force -ErrorAction SilentlyContinue
+        shell: pwsh
 
   apply:
     name: Terraform Apply
@@ -132,17 +144,6 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      TF_VAR_hml_public_subnet_ids: ${{ inputs.environment == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}
-      TF_VAR_hml_allowed_cidr_blocks: ${{ inputs.environment == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}
-      TF_VAR_prod_private_subnet_ids: ${{ inputs.environment == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}
-      TF_VAR_prod_allowed_security_group_ids: ${{ inputs.environment == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}
-      TF_VAR_prod_lambda_security_group_ids: ${{ inputs.environment == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}
-      TF_VAR_alarm_cpu_threshold: ${{ inputs.environment == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}
-      TF_VAR_alarm_free_storage_threshold_bytes: ${{ inputs.environment == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}
-      TF_VAR_alarm_connections_threshold: ${{ inputs.environment == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}
-      TF_VAR_alarm_actions: ${{ inputs.environment == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
-      TF_VAR_alarm_ok_actions: ${{ inputs.environment == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
-      TF_VAR_final_snapshot_revision: ${{ inputs.environment == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -156,15 +157,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          required=(TF_VAR_alarm_cpu_threshold TF_VAR_alarm_free_storage_threshold_bytes TF_VAR_alarm_connections_threshold TF_VAR_alarm_actions TF_VAR_alarm_ok_actions TF_VAR_final_snapshot_revision)
+          hml_public_subnet_ids='${{ inputs.environment == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}'
+          hml_allowed_cidr_blocks='${{ inputs.environment == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}'
+          prod_private_subnet_ids='${{ inputs.environment == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}'
+          prod_allowed_security_group_ids='${{ inputs.environment == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}'
+          prod_lambda_security_group_ids='${{ inputs.environment == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}'
+          alarm_cpu_threshold='${{ inputs.environment == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}'
+          alarm_free_storage_threshold_bytes='${{ inputs.environment == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}'
+          alarm_connections_threshold='${{ inputs.environment == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}'
+          alarm_actions='${{ inputs.environment == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}'
+          alarm_ok_actions='${{ inputs.environment == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}'
+          final_snapshot_revision='${{ inputs.environment == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}'
+          required=(alarm_cpu_threshold alarm_free_storage_threshold_bytes alarm_connections_threshold alarm_actions alarm_ok_actions final_snapshot_revision)
           if [[ "${TF_ENVIRONMENT}" == hml ]]; then
-            required+=(TF_VAR_hml_public_subnet_ids TF_VAR_hml_allowed_cidr_blocks)
-            [[ -z "${TF_VAR_prod_private_subnet_ids}" && -z "${TF_VAR_prod_allowed_security_group_ids}" && -z "${TF_VAR_prod_lambda_security_group_ids}" ]] || { echo 'PROD inputs must not be supplied to HML'; exit 1; }
+            required+=(hml_public_subnet_ids hml_allowed_cidr_blocks)
+            [[ -z "$prod_private_subnet_ids" && -z "$prod_allowed_security_group_ids" && -z "$prod_lambda_security_group_ids" ]] || { echo 'PROD inputs must not be supplied to HML'; exit 1; }
           else
-            required+=(TF_VAR_prod_private_subnet_ids TF_VAR_prod_allowed_security_group_ids TF_VAR_prod_lambda_security_group_ids)
-            [[ -z "${TF_VAR_hml_public_subnet_ids}" && -z "${TF_VAR_hml_allowed_cidr_blocks}" ]] || { echo 'HML inputs must not be supplied to PROD'; exit 1; }
+            required+=(prod_private_subnet_ids prod_allowed_security_group_ids prod_lambda_security_group_ids)
+            [[ -z "$hml_public_subnet_ids" && -z "$hml_allowed_cidr_blocks" ]] || { echo 'HML inputs must not be supplied to PROD'; exit 1; }
           fi
           for name in "${required[@]}"; do [[ -n "${!name}" ]] || { echo "Missing required environment value: $name"; exit 1; }; done
+          jq -n \
+            --arg environment "$TF_ENVIRONMENT" \
+            --argjson hml_public_subnet_ids "${hml_public_subnet_ids:-[]}" \
+            --argjson hml_allowed_cidr_blocks "${hml_allowed_cidr_blocks:-[]}" \
+            --argjson prod_private_subnet_ids "${prod_private_subnet_ids:-[]}" \
+            --argjson prod_allowed_security_group_ids "${prod_allowed_security_group_ids:-[]}" \
+            --argjson prod_lambda_security_group_ids "${prod_lambda_security_group_ids:-[]}" \
+            --argjson alarm_cpu_threshold "$alarm_cpu_threshold" \
+            --argjson alarm_free_storage_threshold_bytes "$alarm_free_storage_threshold_bytes" \
+            --argjson alarm_connections_threshold "$alarm_connections_threshold" \
+            --argjson alarm_actions "$alarm_actions" \
+            --argjson alarm_ok_actions "$alarm_ok_actions" \
+            --arg final_snapshot_revision "$final_snapshot_revision" \
+            '{environment: $environment, hml_public_subnet_ids: $hml_public_subnet_ids, hml_allowed_cidr_blocks: $hml_allowed_cidr_blocks, prod_private_subnet_ids: $prod_private_subnet_ids, prod_allowed_security_group_ids: $prod_allowed_security_group_ids, prod_lambda_security_group_ids: $prod_lambda_security_group_ids, alarm_cpu_threshold: $alarm_cpu_threshold, alarm_free_storage_threshold_bytes: $alarm_free_storage_threshold_bytes, alarm_connections_threshold: $alarm_connections_threshold, alarm_actions: $alarm_actions, alarm_ok_actions: $alarm_ok_actions, final_snapshot_revision: $final_snapshot_revision}' \
+            > terraform.auto.tfvars.json
       - name: Configure AWS credentials (temporary)
         if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -180,7 +207,8 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - run: terraform init -reconfigure -input=false
-      - uses: actions/download-artifact@v4
-        with:
-          name: tfplan-${{ env.TF_ENVIRONMENT }}-${{ github.run_id }}
-      - run: terraform apply -input=false -auto-approve tfplan
+      - run: terraform apply -input=false -auto-approve
+      - name: Remove temporary Terraform variables
+        if: always()
+        run: Remove-Item -LiteralPath terraform.auto.tfvars.json -Force -ErrorAction SilentlyContinue
+        shell: pwsh
