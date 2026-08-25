@@ -27,25 +27,37 @@ terraform init -backend=false -input=false
 terraform validate
 ```
 
-These commands do not need AWS credentials or remote state. A real plan needs
-the state backend, AWS access, and an already-applied `repo-k8s-infra` state:
+These commands do not need AWS credentials or remote state. A real plan uses
+HCP Terraform state, AWS access, and an already-applied `repo-k8s-infra` state:
 
 ```bash
-terraform init -backend-config=environments/hml/backend.hcl -input=false
+terraform init -reconfigure \
+  -backend-config=organization=async_furious \
+  -backend-config=workspaces.name=tc3-db-hml \
+  -input=false
 terraform plan -input=false -var=environment=hml -out=tfplan
 ```
 
-Use the `prod` backend config and environment only for production.
+Use `tc3-db-prod` and `environment=prod` for production. Set
+`TF_TOKEN_app_terraform_io` from the `TF_API_TOKEN` secret for HCP Terraform
+authentication.
 
 ## Backend and CI
 
-The S3 backend is selected at init time. HML and PROD use separate state keys
-in `environments/{hml,prod}/backend.hcl`; the bucket and DynamoDB lock table
-must be provisioned before a real init.
+State is stored in HCP Terraform organization `async_furious`, in the
+environment-specific workspaces `tc3-db-hml` and `tc3-db-prod`. Configure both
+workspaces for local execution (HCP stores state; GitHub runners execute
+Terraform). The existing HML workspace is `tc3-db-hml`.
+
+For the one-time migration, initialize against the old S3 configuration with
+`-migrate-state`, then reinitialize with the HCP backend above. Verify the HCP
+state before deleting the old S3 state.
 
 The workflow's required `validate` job is credential-free. Plans from forked
 pull requests are skipped. CI accepts all three AWS Academy temporary
-credentials together, or falls back to OIDC only when all three are empty.
+credentials together, refreshing them independently for plan and apply, or
+falls back to OIDC only when all three are empty. AWS credentials remain
+GitHub job credentials; HCP uses the `TF_API_TOKEN` secret.
 `workflow_dispatch` selects HML or PROD. Plan jobs use `hml-plan`/`prod-plan`
 and apply jobs use `hml-apply`/`prod-apply`; production requires its configured
 reviewers. Configure the environment-scoped values used by CI:

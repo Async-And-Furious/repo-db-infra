@@ -71,6 +71,7 @@ jobs:
       TF_VAR_alarm_actions: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
       TF_VAR_alarm_ok_actions: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
       TF_VAR_final_snapshot_revision: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -106,7 +107,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -backend-config=environments/${{ env.TF_ENVIRONMENT }}/backend.hcl -input=false
+      - run: terraform init -reconfigure -backend-config=organization=async_furious -backend-config=workspaces.name=tc3-db-${{ inputs.environment || 'hml' }} -input=false
       - run: terraform plan -input=false -var=environment=${{ env.TF_ENVIRONMENT }} -out=tfplan
       - name: Upload sensitive plan artifact
         uses: actions/upload-artifact@v4
@@ -142,6 +143,7 @@ jobs:
       TF_VAR_alarm_actions: ${{ inputs.environment == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
       TF_VAR_alarm_ok_actions: ${{ inputs.environment == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
       TF_VAR_final_snapshot_revision: ${{ inputs.environment == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -177,7 +179,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -backend-config=environments/${{ env.TF_ENVIRONMENT }}/backend.hcl -input=false
+      - run: terraform init -reconfigure -backend-config=organization=async_furious -backend-config=workspaces.name=tc3-db-${{ inputs.environment || 'hml' }} -input=false
       - uses: actions/download-artifact@v4
         with:
           name: tfplan-${{ env.TF_ENVIRONMENT }}-${{ github.run_id }}

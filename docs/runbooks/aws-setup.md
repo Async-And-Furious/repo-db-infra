@@ -2,8 +2,10 @@
 
 This runbook records prerequisites; it does not apply Terraform.
 
-1. Create the encrypted, versioned S3 bucket `tc3-terraform-state` and the
-   lock table `tc3-terraform-locks` in `us-east-1`.
+1. Create HCP Terraform workspaces `tc3-db-hml` and `tc3-db-prod` in the
+   `async_furious` organization and set both to **local execution**. The HML
+   workspace `tc3-db-hml` already exists. Configure the `TF_API_TOKEN` GitHub
+   secret with permission to read/write workspace state.
 2. Apply `repo-k8s-infra` for the target environment so its state publishes
    `vpc_id`, at least two private subnet IDs, and `node_security_group_id`.
    The VPC is owned there; this repository has no default-VPC fallback.
@@ -33,9 +35,11 @@ This runbook records prerequisites; it does not apply Terraform.
    such as `["subnet-...","subnet-..."]`, `["203.0.113.0/24"]`, or `[]`.
    Increment the PROD snapshot revision before destructive replacement.
 
-The first real plan is intentionally external to local validation: it needs
-AWS credentials, the backend bucket/table, and the applied K8s remote state.
-No production apply or destructive operation is performed by this runbook.
+Before the first real plan, migrate each existing S3 state to its matching HCP
+workspace using a controlled `terraform init -migrate-state` transition, then
+verify the HCP state. No production apply or destructive operation is performed
+by this runbook. AWS Academy credentials are supplied by GitHub and refreshed
+separately for plan and apply.
 
 Before HML exposure, confirm CIDR ownership/expiry, TLS-capable Lambda/Prisma
 clients, RDS-managed Secrets Manager access, backups, all three alarms and SNS

@@ -24,3 +24,10 @@
   changes were performed.
 - Validation used `terraform fmt -recursive`, backend-free init/validate,
   workflow YAML duplicate-key parsing, and `git diff --check`.
+
+## 2026-08-24
+
+- Switched database state from S3/DynamoDB to HCP Terraform state-only workspaces
+  `tc3-db-hml` and `tc3-db-prod` with local execution. Updated CI token/backend
+  configuration and documented the controlled state migration; no apply,
+  commit, or push was performed.
