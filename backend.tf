@@ -1,9 +1,5 @@
 terraform {
-  backend "remote" {
-    organization = "async_furious"
-
-    workspaces {
-      name = "tc3-db-hml"
-    }
-  }
+  # Partial configuration: bucket/key/region come from backend.hcl, which the
+  # workflow generates per environment from the live Lab account ID.
+  backend "s3" {}
 }

@@ -43,25 +43,35 @@ variable "prod_lambda_security_group_ids" {
   default     = []
 }
 
+# Defaults keep an AWS Academy lab deployable without an SNS topic or a full set
+# of tuning variables; override any of them per environment from CI.
 variable "alarm_cpu_threshold" {
-  type = number
+  type    = number
+  default = 80
 }
 variable "alarm_free_storage_threshold_bytes" {
-  type = number
+  description = "Free storage low-water mark in bytes (default 2 GiB)"
+  type        = number
+  default     = 2147483648
 }
 variable "alarm_connections_threshold" {
-  type = number
+  type    = number
+  default = 80
 }
 variable "alarm_actions" {
-  type = list(string)
+  description = "SNS topic ARNs notified on ALARM; empty means alarms are recorded but not routed"
+  type        = list(string)
+  default     = []
 }
 variable "alarm_ok_actions" {
-  type = list(string)
+  type    = list(string)
+  default = []
 }
 
 variable "final_snapshot_revision" {
   description = "Explicit replacement nonce for collision-safe PROD final snapshots"
   type        = string
+  default     = "1"
 
   validation {
     condition     = trimspace(var.final_snapshot_revision) != ""
