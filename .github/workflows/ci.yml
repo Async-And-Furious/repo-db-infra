@@ -46,11 +46,7 @@ jobs:
   plan:
     name: Terraform Plan
     needs: validate
-    # Never expose credentials to a pull request from a fork.
-    if: >-
-      (github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository) ||
-      github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'plan'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'hml' }}-plan
     permissions:
@@ -131,7 +127,7 @@ jobs:
 
   apply:
     name: Terraform Apply
-    needs: plan
+    needs: validate
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
     runs-on: ubuntu-latest
     # Configure required reviewers on both environments; prod must be protected.

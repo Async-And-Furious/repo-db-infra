@@ -43,3 +43,8 @@
   without `-out`, and apply directly; removed plan artifacts. No apply was run.
 - Validation used Terraform formatting, backend-free init/validate, workflow YAML
   parsing, and `git diff --check`.
+
+## 2026-08-26
+
+- Shortened workflow dispatch applies to run directly after validation; plan runs
+  only for `action=plan`. No Terraform apply was run.
