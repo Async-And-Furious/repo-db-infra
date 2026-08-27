@@ -10,6 +10,8 @@ provider "aws" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 # RFC-004: repo-k8s-infra owns the VPC and publishes vpc_id/subnet/node-SG
 # outputs. Read them from its state directly instead of requiring manual
 # copy-paste into tfvars for every environment.
@@ -17,7 +19,7 @@ data "terraform_remote_state" "k8s_infra" {
   backend = "s3"
 
   config = {
-    bucket = "tc3-terraform-state"
+    bucket = "tc3-tfstate-${data.aws_caller_identity.current.account_id}"
     key    = "repo-k8s-infra/${var.environment}/terraform.tfstate"
     region = var.aws_region
   }
