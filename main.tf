@@ -28,7 +28,7 @@ data "terraform_remote_state" "k8s_infra" {
 locals {
   is_hml     = var.environment == "hml"
   vpc_id     = data.terraform_remote_state.k8s_infra.outputs.vpc_id
-  subnet_ids = local.is_hml ? var.hml_public_subnet_ids : var.prod_private_subnet_ids
+  subnet_ids = var.destroy_mode ? data.terraform_remote_state.k8s_infra.outputs.public_subnet_ids : (local.is_hml ? var.hml_public_subnet_ids : var.prod_private_subnet_ids)
   allowed_security_group_ids = local.is_hml ? [] : distinct(concat(
     var.prod_allowed_security_group_ids,
     var.prod_lambda_security_group_ids,
@@ -53,6 +53,7 @@ data "aws_route_table" "selected" {
 }
 
 locals {
+  allowed_cidr_blocks = var.destroy_mode ? [data.aws_vpc.selected.cidr_block] : var.hml_allowed_cidr_blocks
   selected_availability_zones = distinct([
     for subnet in data.aws_subnet.selected : subnet.availability_zone
   ])
@@ -66,14 +67,18 @@ locals {
 resource "terraform_data" "input_contract" {
   lifecycle {
     precondition {
-      condition = local.is_hml ? (
+      condition     = !var.destroy_mode || local.is_hml
+      error_message = "destroy_mode is HML-only; production destroy is disabled."
+    }
+    precondition {
+      condition = var.destroy_mode || (local.is_hml ? (
         length(var.hml_public_subnet_ids) >= 2 && length(var.hml_allowed_cidr_blocks) > 0 &&
         length(var.prod_private_subnet_ids) == 0 && length(var.prod_allowed_security_group_ids) == 0 &&
         length(var.prod_lambda_security_group_ids) == 0
         ) : (
         length(var.prod_private_subnet_ids) >= 2 &&
         length(var.hml_public_subnet_ids) == 0 && length(var.hml_allowed_cidr_blocks) == 0
-      )
+      ))
       error_message = "Inputs must be environment-scoped: HML requires public subnets and allowed CIDRs; PROD rejects them and uses private subnets/security groups."
     }
     precondition {
@@ -111,7 +116,7 @@ module "rds" {
   subnet_ids                         = local.subnet_ids
   publicly_accessible                = local.is_hml
   allowed_security_group_ids         = local.allowed_security_group_ids
-  allowed_cidr_blocks                = var.hml_allowed_cidr_blocks
+  allowed_cidr_blocks                = local.allowed_cidr_blocks
   alarm_cpu_threshold                = var.alarm_cpu_threshold
   alarm_free_storage_threshold_bytes = var.alarm_free_storage_threshold_bytes
   alarm_connections_threshold        = var.alarm_connections_threshold

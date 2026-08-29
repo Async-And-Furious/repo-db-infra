@@ -7,6 +7,12 @@ variable "environment" {
   }
 }
 
+variable "destroy_mode" {
+  description = "Use live HML K8s remote-state network outputs for an HML-only destroy"
+  type        = bool
+  default     = false
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string

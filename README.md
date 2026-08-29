@@ -28,7 +28,7 @@ terraform validate
 ```
 
 These commands do not need AWS credentials or remote state. A real plan uses
-HCP Terraform state, AWS access, and an already-applied `repo-k8s-infra` state:
+S3 Terraform state, AWS access, and an already-applied `repo-k8s-infra` state:
 
 ```bash
 terraform init -reconfigure \
@@ -39,30 +39,18 @@ terraform plan -input=false
 CI writes the environment-scoped inputs to a temporary
 `terraform.auto.tfvars.json` before planning or applying.
 
-Use `tc3-db-prod` and `environment=prod` for production. Set
-`TF_TOKEN_app_terraform_io` from the `TF_API_TOKEN` secret for HCP Terraform
-authentication.
-
 ## Backend and CI
 
-State is stored in HCP Terraform organization `async_furious`, in the
-environment-specific workspaces `tc3-db-hml` and `tc3-db-prod`. Configure both
-workspaces for local execution (HCP stores state; GitHub runners execute
-Terraform). The existing HML workspace is `tc3-db-hml`.
-
-For the one-time migration, initialize against the old S3 configuration with
-`-migrate-state`, then reinitialize with `terraform init -reconfigure -input=false`.
-The HML root backend is pinned to `tc3-db-hml`; verify the HCP state before
-deleting the old S3 state.
+State is stored in the live account's `tc3-tfstate-<account-id>` S3 bucket at
+`repo-db-infra/<environment>/terraform.tfstate`. The apply path bootstraps and
+configures this backend. The K8s remote state remains available during DB
+operations because DB resources depend on its VPC and security-group outputs.
 
 The workflow's required `validate` job is credential-free. Plans from forked
 pull requests are skipped. CI accepts all three AWS Academy temporary
 credentials together, refreshing them independently for plan and apply, or
-falls back to OIDC only when all three are empty. AWS credentials remain
-GitHub job credentials; HCP uses the `TF_API_TOKEN` secret.
-`workflow_dispatch` selects HML or PROD. Plan jobs use `hml-plan`/`prod-plan`
-and apply jobs use `hml-apply`/`prod-apply`; production requires its configured
-reviewers. Configure the environment-scoped values used by CI:
+falls back to OIDC only when all three are empty. `workflow_dispatch` selects
+HML or PROD. Configure the environment-scoped values used by CI:
 
 - HML vars: `HML_PUBLIC_SUBNET_IDS`, `HML_ALLOWED_CIDR_BLOCKS`,
   `HML_ALARM_CPU_THRESHOLD`, `HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES`,
@@ -79,6 +67,27 @@ List values are JSON strings, for example
 `["203.0.113.0/24"]`, or `[]`. Thresholds are decimal numbers.
 `final_snapshot_revision` must be nonempty; increment the PROD value before a
 destructive replacement so its final snapshot identifier cannot collide.
+
+### HML destroy
+
+`destroy-plan` and `destroy` are manual, HML-only operations and require the
+explicit `academy_mode=true` input plus all three AWS Academy temporary
+credentials. Production destroy is rejected.
+`destroy` additionally requires confirmation exactly `DESTROY HML`; it saves a
+destroy plan and applies that exact plan. `destroy-plan` only runs
+`terraform plan -destroy` and does not apply it.
+
+Destroy discovery only reads the account-qualified S3 bucket/state and never
+bootstraps or changes backend settings. A missing bucket, missing key, or empty
+Terraform state is a successful no-op; access failures fail closed. Terraform
+retains the state object and bucket after resource deletion. HML RDS deletion
+uses the existing `skip_final_snapshot = true` semantics, so **no final RDS
+snapshot is created**. Production database snapshot semantics are unchanged.
+Destroy tfvars contain only `environment=hml`, `destroy_mode=true`, and the AWS
+region; destroy does not consume deploy-time GitHub variables. In destroy mode,
+Terraform derives the public subnet IDs from the live K8s remote-state output
+and the allowed CIDR from that output's VPC. The K8s state and VPC must still
+exist, so destroy the DB before destroying K8s infrastructure.
 
 ## Naming
 

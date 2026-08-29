@@ -17,9 +17,14 @@ on:
         required: true
         default: plan
         type: choice
-        options: [plan, apply]
+        options: [plan, apply, destroy-plan, destroy]
+      academy_mode:
+        description: Confirm this run uses AWS Academy temporary credentials
+        required: true
+        default: false
+        type: boolean
       confirm:
-        description: Type "APPLY PROD" to allow a production apply
+        description: Type "APPLY PROD" for production apply or "DESTROY HML" for HML destroy
         required: false
         default: ""
         type: string
@@ -70,6 +75,20 @@ jobs:
           [ "$CONFIRM" = "APPLY PROD" ] || { echo 'Production apply requires confirm="APPLY PROD".' >&2; exit 1; }
         env:
           CONFIRM: ${{ inputs.confirm }}
+      - name: Guard destroy scope
+        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
+        shell: bash
+        env:
+          ACADEMY_MODE: ${{ inputs.academy_mode }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          [[ "$TF_ENVIRONMENT" == hml ]] || { echo 'Destroy operations are HML-only; production destroy is disabled.' >&2; exit 1; }
+          [[ "$ACADEMY_MODE" == true ]] || { echo 'Destroy operations require academy_mode=true.' >&2; exit 1; }
+          [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" && -n "$AWS_SESSION_TOKEN" ]] || { echo 'Destroy operations require all three AWS Academy temporary credentials.' >&2; exit 1; }
+          if [[ "${{ inputs.action }}" == destroy ]]; then
+            [[ "$CONFIRM" == 'DESTROY HML' ]] || { echo 'Destroy requires confirm="DESTROY HML".' >&2; exit 1; }
+          fi
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -79,7 +98,13 @@ jobs:
           (env.AWS_ACCESS_KEY_ID != '' || env.AWS_SECRET_ACCESS_KEY != '' || env.AWS_SESSION_TOKEN != '') &&
           !(env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != '')
         run: exit 1
+      - name: Locate existing Terraform state for destroy
+        id: destroy-backend
+        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
+        shell: bash
+        run: bash .github/scripts/read-backend.sh repo-db-infra "$TF_ENVIRONMENT"
       - name: Fail closed on environment inputs
+        if: inputs.action == 'plan' || inputs.action == 'apply'
         shell: bash
         env:
           # Only the network contract is genuinely per-environment and undiscoverable
@@ -153,15 +178,36 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Bootstrap Terraform state backend
+        if: inputs.action == 'plan' || inputs.action == 'apply'
         shell: bash
         run: bash .github/scripts/bootstrap-backend.sh repo-db-infra "$TF_ENVIRONMENT"
-      - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Summarize HML destroy behavior
+        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
+        shell: bash
+        run: |
+          {
+            echo '### HML database destroy'
+            echo '- RDS final snapshot: **disabled** (`skip_final_snapshot = true`).'
+            echo '- The S3 state object and bucket are retained.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Initialize Terraform backend
+        if: inputs.action == 'plan' || inputs.action == 'apply' || steps.destroy-backend.outputs.state_exists == 'true'
+        run: terraform init -reconfigure -input=false -backend-config=backend.hcl
       - name: Terraform plan
         if: inputs.action == 'plan'
         run: terraform plan -input=false
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: terraform apply -input=false -auto-approve
+      - name: Terraform destroy plan
+        if: inputs.action == 'destroy-plan' && steps.destroy-backend.outputs.state_exists == 'true'
+        run: terraform plan -destroy -input=false
+      - name: Create saved Terraform destroy plan
+        if: inputs.action == 'destroy' && steps.destroy-backend.outputs.state_exists == 'true'
+        run: terraform plan -destroy -input=false -out=destroy.tfplan
+      - name: Apply saved Terraform destroy plan
+        if: inputs.action == 'destroy' && steps.destroy-backend.outputs.state_exists == 'true'
+        run: terraform apply -input=false destroy.tfplan
       - name: Remove generated Terraform inputs
         if: always()
-        run: rm -f terraform.auto.tfvars.json backend.hcl
+        run: rm -f terraform.auto.tfvars.json backend.hcl destroy.tfplan
