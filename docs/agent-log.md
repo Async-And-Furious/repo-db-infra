@@ -48,3 +48,11 @@
 
 - Shortened workflow dispatch applies to run directly after validation; plan runs
   only for `action=plan`. No Terraform apply was run.
+
+## 2026-08-29
+
+- Updated CI for the AWS Academy lifecycle: `develop` automatically deploys HML,
+  `main` requires the protected PROD Environment, and apply consumes a saved
+  Terraform plan artifact. Added credential/state preflight and an explicit
+  cross-repository network-input validator. HML destroy remains manual, guarded,
+  and HML-only; no AWS/Terraform apply or destroy was run.

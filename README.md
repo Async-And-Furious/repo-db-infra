@@ -47,10 +47,15 @@ configures this backend. The K8s remote state remains available during DB
 operations because DB resources depend on its VPC and security-group outputs.
 
 The workflow's required `validate` job is credential-free. Plans from forked
-pull requests are skipped. CI accepts all three AWS Academy temporary
-credentials together, refreshing them independently for plan and apply, or
-falls back to OIDC only when all three are empty. `workflow_dispatch` selects
-HML or PROD. Configure the environment-scoped values used by CI:
+pull requests are skipped. A push to `develop` plans and automatically deploys
+HML; a push to `main` plans and waits for the protected `prod` Environment
+approval before applying PROD. Manual PROD applies also require the explicit
+`APPLY PROD` confirmation. Every apply downloads the saved Terraform plan
+artifact produced by the preceding plan job. CI accepts all three AWS Academy
+temporary credentials together, or falls back to OIDC only when all three are
+empty. Credential, caller identity, state backend and cross-repository network
+inputs are checked before planning. `workflow_dispatch` selects HML or PROD.
+Configure the environment-scoped values used by CI:
 
 - HML vars: `HML_PUBLIC_SUBNET_IDS`, `HML_ALLOWED_CIDR_BLOCKS`,
   `HML_ALARM_CPU_THRESHOLD`, `HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES`,
