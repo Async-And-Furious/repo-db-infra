@@ -17,9 +17,9 @@ own the network.
 ## Decision
 
 `repo-k8s-infra` owns the VPC, public/private subnets, and route
-tables/NAT. `repo-db-infra` does not create a VPC; it consumes `vpc_id` and
-`private_subnet_ids` as Terraform input variables from `repo-k8s-infra`'s
-outputs.
+tables/NAT. `repo-db-infra` does not create a VPC; it consumes the VPC and
+subnet/security-group outputs from `repo-k8s-infra` through Terraform remote
+state.
 
 ## Rationale
 
@@ -42,9 +42,9 @@ outputs.
 - Output values are passed via a `terraform_remote_state` data source in
   `repo-db-infra` pointed at `repo-k8s-infra`'s S3 state key
   (`repo-k8s-infra/${environment}/terraform.tfstate`, same bucket both
-  repos use for their own state). `vpc_id`/`private_subnet_ids` still
-  accept manual overrides; `allowed_security_group_ids` always includes
-  the EKS node group SG plus any extras. This only resolves once
+  repos use for their own state). Environment-specific DB inputs are supplied
+  by this repository's CI; the K8s state remains authoritative for shared
+  network ownership. This only resolves once
   `repo-k8s-infra`'s state has actually been applied for that environment
   — the provisioning-order requirement above is load-bearing, not just
   a suggestion.

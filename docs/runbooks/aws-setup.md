@@ -9,8 +9,8 @@ manually provisioned `tc3-terraform-state` bucket with a
 
 The canonical, current documents live in the workspace root:
 
-- `HANDOFF-AWS-SETUP.md` — what a human sets up, per path (AWS Academy or a
-  real account with OIDC), and what the pipeline provisions for itself.
+- `HANDOFF-AWS-SETUP.md` — what a human sets up for the AWS Academy path and
+  what the pipeline provisions for itself.
 - `AWS_HML_RUNBOOK.md` — the operator procedure, gates, and
   `scripts/aws_lab.py` usage.
 

@@ -49,6 +49,14 @@
 - Shortened workflow dispatch applies to run directly after validation; plan runs
   only for `action=plan`. No Terraform apply was run.
 
+## 2026-08-30
+
+- Aligned CI with the confirmed AWS Academy lifecycle for both HML and PROD:
+  complete temporary credentials are required, the protected production
+  Environment gates only the saved-plan apply, and HML destroy remains manual.
+  Clarified the RDS application connection contract with `ssl_mode=require` and
+  updated stale RFC/runbook references. No AWS/Terraform apply or destroy was run.
+
 ## 2026-08-29
 
 - Updated CI for the AWS Academy lifecycle: `develop` automatically deploys HML,
@@ -56,3 +64,19 @@
   Terraform plan artifact. Added credential/state preflight and an explicit
   cross-repository network-input validator. HML destroy remains manual, guarded,
   and HML-only; no AWS/Terraform apply or destroy was run.
+
+## 2026-08-30 Application connection handoff
+
+- Exposed explicitly named RDS application outputs for reproducible consumption:
+  host, port, database, required SSL mode, and the RDS-managed Secrets Manager
+  ARN. Documented the Academy-credentialed runtime fetch/build handoff without
+  adding cross-repository API calls. HML/PROD separation, protected production
+  exact-plan approval, and HML-only destroy are unchanged; no apply or destroy
+  was run.
+
+## 2026-08-31 Workflow environment binding
+
+- Bound plan to the dynamically selected GitHub Environment and added that
+  environment to plan artifact names and apply downloads. Production approval
+  and manual HML-only destroy semantics remain unchanged; no AWS apply/destroy,
+  commit, or push was performed.

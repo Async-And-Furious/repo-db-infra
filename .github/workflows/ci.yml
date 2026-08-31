@@ -19,7 +19,7 @@ on:
         type: choice
         options: [plan, apply, destroy-plan, destroy]
       academy_mode:
-        description: Confirm this run uses AWS Academy temporary credentials
+        description: Confirm this run uses AWS Academy temporary credentials (required for every dispatch)
         required: true
         default: false
         type: boolean
@@ -64,9 +64,8 @@ jobs:
       name: ${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}
     permissions:
       contents: read
-      id-token: write
     env:
-      ACADEMY_MODE: ${{ (github.event_name == 'push' && github.ref_name == 'develop') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'hml' && inputs.academy_mode == true) }}
+      ACADEMY_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.academy_mode == true) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
@@ -90,14 +89,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$TF_ENVIRONMENT" == prod && "$ACADEMY_MODE" == true ]]; then
-            echo 'academy_mode=true is not permitted for prod.' >&2
-            exit 1
-          fi
-          if [[ "$ACADEMY_MODE" == true && "$TF_ENVIRONMENT" != hml ]]; then
-            echo 'Academy mode is restricted to HML.' >&2
-            exit 1
-          fi
           present=0
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
             [[ -n "${!name}" ]] && present=$((present + 1))
@@ -108,13 +99,7 @@ jobs:
               exit 1
             fi
           else
-            if (( present != 0 )); then
-              echo 'academy_mode=false requires OIDC credentials, not Academy credentials.' >&2
-              exit 1
-            fi
-          fi
-          if (( present == 0 && -z "${{ vars.AWS_ROLE_ARN }}" )); then
-            echo 'OIDC mode requires an OIDC role ARN.' >&2
+            echo 'AWS Academy temporary credentials are required.' >&2
             exit 1
           fi
       - name: Configure AWS credentials (Academy)
@@ -124,12 +109,6 @@ jobs:
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Configure AWS credentials (OIDC)
-        if: env.ACADEMY_MODE == 'false' && env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: AWS and cross-repository state preflight
         shell: bash
@@ -143,7 +122,7 @@ jobs:
         run: terraform plan -input=false -out=terraform.tfplan
       - uses: actions/upload-artifact@v4
         with:
-          name: terraform-plan-${{ github.run_id }}
+          name: terraform-plan-${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}-${{ github.run_id }}
           path: terraform.tfplan
           retention-days: 7
           if-no-files-found: error
@@ -161,9 +140,9 @@ jobs:
       name: ${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}
     permissions:
       contents: read
-      id-token: write
     env:
-      ACADEMY_MODE: ${{ (github.event_name == 'push' && github.ref_name == 'develop') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'hml' && inputs.academy_mode == true) }}
+      TF_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml') }}
+      ACADEMY_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.academy_mode == true) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
@@ -180,21 +159,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$TF_ENVIRONMENT" == prod && "$ACADEMY_MODE" == true ]]; then
-            echo 'academy_mode=true is not permitted for prod.' >&2
-            exit 1
-          fi
-          if [[ "$ACADEMY_MODE" == true && "$TF_ENVIRONMENT" != hml ]]; then
-            echo 'Academy mode is restricted to HML.' >&2
-            exit 1
-          fi
           count=0
           for value in "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"; do [[ -n "$value" ]] && count=$((count + 1)); done
           if [[ "$ACADEMY_MODE" == true ]]; then
             [[ "$count" == 3 ]] || { echo 'academy_mode=true requires complete Academy credentials.' >&2; exit 1; }
           else
-            [[ "$count" == 0 ]] || { echo 'academy_mode=false requires OIDC credentials, not Academy credentials.' >&2; exit 1; }
-            [[ -n "${{ vars.AWS_ROLE_ARN }}" ]] || { echo 'OIDC mode requires an OIDC role ARN.' >&2; exit 1; }
+            echo 'AWS Academy temporary credentials are required.' >&2
+            exit 1
           fi
       - name: Configure AWS credentials (Academy)
         if: env.ACADEMY_MODE == 'true' && env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
@@ -204,12 +175,6 @@ jobs:
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Configure AWS credentials (OIDC)
-        if: env.ACADEMY_MODE == 'false' && env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
       - name: State preflight
         shell: bash
         run: |
@@ -218,7 +183,7 @@ jobs:
           bash .github/scripts/bootstrap-backend.sh repo-db-infra "$TF_ENVIRONMENT"
       - uses: actions/download-artifact@v4
         with:
-          name: terraform-plan-${{ github.run_id }}
+          name: terraform-plan-${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}-${{ github.run_id }}
       - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
       - name: Apply saved Terraform plan
         run: terraform apply -input=false terraform.tfplan
@@ -234,7 +199,6 @@ jobs:
       name: hml
     permissions:
       contents: read
-      id-token: write
     env:
       ACADEMY_MODE: ${{ inputs.academy_mode == true }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

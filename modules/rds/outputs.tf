@@ -21,11 +21,12 @@ output "master_user_secret_arn" {
 }
 
 output "connection_contract" {
-  description = "Non-secret connection contract plus the Secrets Manager reference"
+  description = "Application handoff: RDS endpoint metadata, required TLS mode, and the RDS-managed secret reference"
   value = {
     host              = aws_db_instance.this.address
     port              = aws_db_instance.this.port
     database          = aws_db_instance.this.db_name
+    ssl_mode          = "require"
     secret_arn        = aws_db_instance.this.master_user_secret[0].secret_arn
     security_group_id = aws_security_group.db.id
   }
