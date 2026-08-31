@@ -10,8 +10,14 @@ security group, alarms and Secrets Manager reference. `repo-k8s-infra` owns the
 VPC; RFC-004 remote state is mandatory. HML public subnet IDs and CIDRs are
 explicit environment-scoped inputs. They must be public subnets with IGW
 routes across at least two AZs, and narrow CIDRs (never `0.0.0.0/0`/`::/0`).
-PROD uses private subnets and SG-only ingress. Outputs expose only connection
-metadata and a sensitive secret ARN, never credential values.
+PROD uses private subnets and SG-only ingress. The named outputs
+`db_host`, `db_port`, `db_name`, `db_ssl_mode` and
+`db_connection_secret_arn` are the application handoff. The deployment uses
+the first four values to build `DATABASE_URL` and uses the last value to fetch
+the RDS-managed JSON credentials from Secrets Manager. Credential values are
+never Terraform outputs. `connection_contract` remains available as a
+backward-compatible aggregate; consumers should use the named outputs rather
+than depend on its object shape.
 
 RDS enforces `rds.force_ssl=1`; Lambda/Prisma clients must use SSL. The
 review-only monolith/auth consumer needs a follow-up compatibility change and
@@ -36,6 +42,34 @@ terraform init -reconfigure \
 terraform plan -input=false
 ```
 
+### Application deployment handoff
+
+The database deployment and the application deployment are separate. There is
+no cross-repository API call: after the exact database plan is applied, an
+operator or deployment job, authenticated with the same three AWS Academy
+temporary credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and
+`AWS_SESSION_TOKEN`), reads the named Terraform outputs from the
+environment-specific state. It must fetch `db_connection_secret_arn` with
+`secretsmanager:GetSecretValue` and combine the returned `username` and
+`password` with `db_host`, `db_port`, `db_name`, and `db_ssl_mode=require` to
+form `DATABASE_URL`. The resulting URL is passed to the application as a
+runtime secret and is never committed or printed.
+
+The output names and meanings are the stable contract:
+
+| Output | Application use |
+| --- | --- |
+| `db_host` | PostgreSQL host |
+| `db_port` | PostgreSQL port |
+| `db_name` | Database name |
+| `db_ssl_mode` | Must be `require` |
+| `db_connection_secret_arn` | Secrets Manager lookup identifier |
+
+Read outputs from the already-selected `hml` or `prod` state; do not mix state
+or environment inputs. The application deployment keeps the same Academy
+credential requirement, and its database inputs are a generated handoff, not
+an invented repository-to-repository API.
+
 CI writes the environment-scoped inputs to a temporary
 `terraform.auto.tfvars.json` before planning or applying.
 
@@ -47,10 +81,18 @@ configures this backend. The K8s remote state remains available during DB
 operations because DB resources depend on its VPC and security-group outputs.
 
 The workflow's required `validate` job is credential-free. Plans from forked
-pull requests are skipped. CI accepts all three AWS Academy temporary
-credentials together, refreshing them independently for plan and apply, or
-falls back to OIDC only when all three are empty. `workflow_dispatch` selects
-HML or PROD. Configure the environment-scoped values used by CI:
+pull requests are skipped. A push to `develop` plans and automatically deploys
+HML; a push to `main` plans, then waits for the protected `production` Environment
+approval before applying PROD. Manual PROD applies also require the explicit
+`APPLY PROD` confirmation. Every apply downloads the saved Terraform plan
+artifact produced by the preceding plan job. CI accepts all three AWS Academy
+temporary credentials together for both HML and PROD; production is not OIDC-only.
+Credential, caller identity, state backend and cross-repository network inputs
+are checked before planning. `workflow_dispatch` selects HML or PROD, and the
+The selected GitHub Environment (`hml` or `production`) supplies the scoped
+values and credentials to planning and applying; production approval remains
+required for the protected `production` Environment.
+Configure the environment-scoped values used by CI:
 
 - HML vars: `HML_PUBLIC_SUBNET_IDS`, `HML_ALLOWED_CIDR_BLOCKS`,
   `HML_ALARM_CPU_THRESHOLD`, `HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES`,

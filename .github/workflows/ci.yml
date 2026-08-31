@@ -19,12 +19,12 @@ on:
         type: choice
         options: [plan, apply, destroy-plan, destroy]
       academy_mode:
-        description: Confirm this run uses AWS Academy temporary credentials
+        description: Confirm this run uses AWS Academy temporary credentials (required for every dispatch)
         required: true
         default: false
         type: boolean
       confirm:
-        description: Type "APPLY PROD" for production apply or "DESTROY HML" for HML destroy
+        description: Type DESTROY HML for an HML destroy
         required: false
         default: ""
         type: string
@@ -38,14 +38,12 @@ concurrency:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  TF_ENVIRONMENT: ${{ inputs.environment || 'hml' }}
+  TF_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml') }}
 
 jobs:
   validate:
     name: Format & Validate
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -55,159 +53,187 @@ jobs:
       - run: terraform init -backend=false -input=false
       - run: terraform validate
 
-  terraform:
-    name: Terraform ${{ inputs.action }}
+  plan:
+    name: Plan ${{ inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml') }}
     needs: validate
-    if: github.event_name == 'workflow_dispatch'
+    if: >-
+      (github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'main')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.action == 'plan' || inputs.action == 'apply'))
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}
     permissions:
       contents: read
-      id-token: write
-      actions: read
     env:
+      ACADEMY_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.academy_mode == true) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      HML_PUBLIC_SUBNET_IDS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}
+      HML_ALLOWED_CIDR_BLOCKS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}
+      PROD_PRIVATE_SUBNET_IDS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}
+      PROD_ALLOWED_SECURITY_GROUP_IDS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}
+      PROD_LAMBDA_SECURITY_GROUP_IDS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}
+      ALARM_CPU_THRESHOLD: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}
+      ALARM_FREE_STORAGE_THRESHOLD_BYTES: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}
+      ALARM_CONNECTIONS_THRESHOLD: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}
+      ALARM_ACTIONS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
+      ALARM_OK_ACTIONS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
+      FINAL_SNAPSHOT_REVISION: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
     steps:
-      - name: Guard production apply
-        if: inputs.environment == 'prod' && inputs.action == 'apply'
-        run: |
-          [ "$CONFIRM" = "APPLY PROD" ] || { echo 'Production apply requires confirm="APPLY PROD".' >&2; exit 1; }
-        env:
-          CONFIRM: ${{ inputs.confirm }}
-      - name: Guard destroy scope
-        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
-        shell: bash
-        env:
-          ACADEMY_MODE: ${{ inputs.academy_mode }}
-          CONFIRM: ${{ inputs.confirm }}
-        run: |
-          set -euo pipefail
-          [[ "$TF_ENVIRONMENT" == hml ]] || { echo 'Destroy operations are HML-only; production destroy is disabled.' >&2; exit 1; }
-          [[ "$ACADEMY_MODE" == true ]] || { echo 'Destroy operations require academy_mode=true.' >&2; exit 1; }
-          [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" && -n "$AWS_SESSION_TOKEN" ]] || { echo 'Destroy operations require all three AWS Academy temporary credentials.' >&2; exit 1; }
-          if [[ "${{ inputs.action }}" == destroy ]]; then
-            [[ "$CONFIRM" == 'DESTROY HML' ]] || { echo 'Destroy requires confirm="DESTROY HML".' >&2; exit 1; }
-          fi
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.13"
-      - name: Reject partial temporary credentials
-        if: >-
-          (env.AWS_ACCESS_KEY_ID != '' || env.AWS_SECRET_ACCESS_KEY != '' || env.AWS_SESSION_TOKEN != '') &&
-          !(env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != '')
-        run: exit 1
-      - name: Locate existing Terraform state for destroy
-        id: destroy-backend
-        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
+      - name: Validate credentials before state access
         shell: bash
-        run: bash .github/scripts/read-backend.sh repo-db-infra "$TF_ENVIRONMENT"
-      - name: Fail closed on environment inputs
-        if: inputs.action == 'plan' || inputs.action == 'apply'
-        shell: bash
-        env:
-          # Only the network contract is genuinely per-environment and undiscoverable
-          # from inside this repo. Alarm tuning and the snapshot nonce fall back to
-          # the Terraform defaults when the repository variable is unset.
-          HML_PUBLIC_SUBNET_IDS: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}
-          HML_ALLOWED_CIDR_BLOCKS: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}
-          PROD_PRIVATE_SUBNET_IDS: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_PRIVATE_SUBNET_IDS || '' }}
-          PROD_ALLOWED_SECURITY_GROUP_IDS: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}
-          PROD_LAMBDA_SECURITY_GROUP_IDS: ${{ (inputs.environment || 'hml') == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}
-          ALARM_CPU_THRESHOLD: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CPU_THRESHOLD || vars.PROD_ALARM_CPU_THRESHOLD }}
-          ALARM_FREE_STORAGE_THRESHOLD_BYTES: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES || vars.PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES }}
-          ALARM_CONNECTIONS_THRESHOLD: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_ALARM_CONNECTIONS_THRESHOLD || vars.PROD_ALARM_CONNECTIONS_THRESHOLD }}
-          ALARM_ACTIONS: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_ACTIONS || secrets.PROD_ALARM_ACTIONS }}
-          ALARM_OK_ACTIONS: ${{ (inputs.environment || 'hml') == 'hml' && secrets.HML_ALARM_OK_ACTIONS || secrets.PROD_ALARM_OK_ACTIONS }}
-          FINAL_SNAPSHOT_REVISION: ${{ (inputs.environment || 'hml') == 'hml' && vars.HML_FINAL_SNAPSHOT_REVISION || vars.PROD_FINAL_SNAPSHOT_REVISION }}
         run: |
           set -euo pipefail
-          if [[ "$TF_ENVIRONMENT" == hml ]]; then
-            required=(HML_PUBLIC_SUBNET_IDS HML_ALLOWED_CIDR_BLOCKS)
-            [[ -z "$PROD_PRIVATE_SUBNET_IDS" && -z "$PROD_ALLOWED_SECURITY_GROUP_IDS" && -z "$PROD_LAMBDA_SECURITY_GROUP_IDS" ]] || { echo 'PROD inputs must not be supplied to HML' >&2; exit 1; }
-          else
-            required=(PROD_PRIVATE_SUBNET_IDS PROD_ALLOWED_SECURITY_GROUP_IDS PROD_LAMBDA_SECURITY_GROUP_IDS)
-            [[ -z "$HML_PUBLIC_SUBNET_IDS" && -z "$HML_ALLOWED_CIDR_BLOCKS" ]] || { echo 'HML inputs must not be supplied to PROD' >&2; exit 1; }
-          fi
-          for name in "${required[@]}"; do
-            [[ -n "${!name}" ]] || { echo "Missing required environment value: $name" >&2; exit 1; }
+          present=0
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+            [[ -n "${!name}" ]] && present=$((present + 1))
           done
-
-          # Start from the network contract, then layer on any tuning override that
-          # was actually provided. Unset values stay on the Terraform default.
-          jq -n \
-            --arg environment "$TF_ENVIRONMENT" \
-            --arg aws_region "$AWS_REGION" \
-            --argjson hml_public_subnet_ids "${HML_PUBLIC_SUBNET_IDS:-[]}" \
-            --argjson hml_allowed_cidr_blocks "${HML_ALLOWED_CIDR_BLOCKS:-[]}" \
-            --argjson prod_private_subnet_ids "${PROD_PRIVATE_SUBNET_IDS:-[]}" \
-            --argjson prod_allowed_security_group_ids "${PROD_ALLOWED_SECURITY_GROUP_IDS:-[]}" \
-            --argjson prod_lambda_security_group_ids "${PROD_LAMBDA_SECURITY_GROUP_IDS:-[]}" \
-            '{environment: $environment, aws_region: $aws_region, hml_public_subnet_ids: $hml_public_subnet_ids, hml_allowed_cidr_blocks: $hml_allowed_cidr_blocks, prod_private_subnet_ids: $prod_private_subnet_ids, prod_allowed_security_group_ids: $prod_allowed_security_group_ids, prod_lambda_security_group_ids: $prod_lambda_security_group_ids}' \
-            > terraform.auto.tfvars.json
-
-          override_json() {
-            [[ -n "${2:-}" ]] || return 0
-            jq --argjson v "$2" ".$1 = \$v" terraform.auto.tfvars.json > tfvars.tmp
-            mv tfvars.tmp terraform.auto.tfvars.json
-          }
-          override_string() {
-            [[ -n "${2:-}" ]] || return 0
-            jq --arg v "$2" ".$1 = \$v" terraform.auto.tfvars.json > tfvars.tmp
-            mv tfvars.tmp terraform.auto.tfvars.json
-          }
-          override_json alarm_cpu_threshold "$ALARM_CPU_THRESHOLD"
-          override_json alarm_free_storage_threshold_bytes "$ALARM_FREE_STORAGE_THRESHOLD_BYTES"
-          override_json alarm_connections_threshold "$ALARM_CONNECTIONS_THRESHOLD"
-          override_json alarm_actions "$ALARM_ACTIONS"
-          override_json alarm_ok_actions "$ALARM_OK_ACTIONS"
-          override_string final_snapshot_revision "$FINAL_SNAPSHOT_REVISION"
-      - name: Configure AWS credentials (temporary)
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
+          if [[ "$ACADEMY_MODE" == true ]]; then
+            if (( present != 3 )); then
+              echo 'academy_mode=true requires access key, secret, and session token.' >&2
+              exit 1
+            fi
+          else
+            echo 'AWS Academy temporary credentials are required.' >&2
+            exit 1
+          fi
+      - name: Configure AWS credentials (Academy)
+        if: env.ACADEMY_MODE == 'true' && env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Configure AWS credentials (OIDC)
-        if: env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Bootstrap Terraform state backend
-        if: inputs.action == 'plan' || inputs.action == 'apply'
-        shell: bash
-        run: bash .github/scripts/bootstrap-backend.sh repo-db-infra "$TF_ENVIRONMENT"
-      - name: Summarize HML destroy behavior
-        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
+      - name: AWS and cross-repository state preflight
         shell: bash
         run: |
-          {
-            echo '### HML database destroy'
-            echo '- RDS final snapshot: **disabled** (`skip_final_snapshot = true`).'
-            echo '- The S3 state object and bucket are retained.'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Initialize Terraform backend
-        if: inputs.action == 'plan' || inputs.action == 'apply' || steps.destroy-backend.outputs.state_exists == 'true'
-        run: terraform init -reconfigure -input=false -backend-config=backend.hcl
-      - name: Terraform plan
-        if: inputs.action == 'plan'
-        run: terraform plan -input=false
-      - name: Terraform apply
-        if: inputs.action == 'apply'
-        run: terraform apply -input=false -auto-approve
-      - name: Terraform destroy plan
+          set -euo pipefail
+          aws sts get-caller-identity >/dev/null
+          bash .github/scripts/bootstrap-backend.sh repo-db-infra "$TF_ENVIRONMENT"
+          bash .github/scripts/validate-inputs.sh "$TF_ENVIRONMENT"
+      - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Save Terraform plan
+        run: terraform plan -input=false -out=terraform.tfplan
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}-${{ github.run_id }}
+          path: terraform.tfplan
+          retention-days: 7
+          if-no-files-found: error
+      - if: always()
+        run: rm -f terraform.auto.tfvars.json backend.hcl terraform.tfplan
+
+  apply:
+    name: Apply ${{ inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml') }}
+    needs: plan
+    if: >-
+      (github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'main')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'apply')
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}
+    permissions:
+      contents: read
+    env:
+      TF_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml') }}
+      ACADEMY_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.academy_mode == true) }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.13"
+      - name: Production confirmation for manual apply
+        if: github.event_name == 'workflow_dispatch' && inputs.environment == 'prod'
+        run: |
+          [[ "${{ inputs.confirm }}" == 'APPLY PROD' ]] || { echo 'Manual production apply requires confirm="APPLY PROD".' >&2; exit 1; }
+      - name: Validate credentials before state access
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          for value in "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"; do [[ -n "$value" ]] && count=$((count + 1)); done
+          if [[ "$ACADEMY_MODE" == true ]]; then
+            [[ "$count" == 3 ]] || { echo 'academy_mode=true requires complete Academy credentials.' >&2; exit 1; }
+          else
+            echo 'AWS Academy temporary credentials are required.' >&2
+            exit 1
+          fi
+      - name: Configure AWS credentials (Academy)
+        if: env.ACADEMY_MODE == 'true' && env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: State preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity >/dev/null
+          bash .github/scripts/bootstrap-backend.sh repo-db-infra "$TF_ENVIRONMENT"
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}-${{ github.run_id }}
+      - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Apply saved Terraform plan
+        run: terraform apply -input=false terraform.tfplan
+      - if: always()
+        run: rm -f backend.hcl terraform.tfplan
+
+  destroy:
+    name: Guarded HML destroy
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && (inputs.action == 'destroy-plan' || inputs.action == 'destroy')
+    runs-on: ubuntu-latest
+    environment:
+      name: hml
+    permissions:
+      contents: read
+    env:
+      ACADEMY_MODE: ${{ inputs.academy_mode == true }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+    steps:
+      - name: Enforce HML Academy destroy guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${{ inputs.environment }}" == hml ]] || { echo 'Destroy is HML-only.' >&2; exit 1; }
+          [[ "$ACADEMY_MODE" == true ]] || { echo 'Destroy requires academy_mode=true.' >&2; exit 1; }
+          [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" && -n "$AWS_SESSION_TOKEN" ]] || { echo 'Destroy requires all temporary Academy credentials.' >&2; exit 1; }
+          if [[ "${{ inputs.action }}" == destroy ]]; then [[ "${{ inputs.confirm }}" == 'DESTROY HML' ]] || { echo 'Destroy requires confirm="DESTROY HML".' >&2; exit 1; }; fi
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.13"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Locate existing state without bootstrapping
+        id: destroy-backend
+        shell: bash
+        run: bash .github/scripts/read-backend.sh repo-db-infra hml
+      - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+        if: steps.destroy-backend.outputs.state_exists == 'true'
+      - run: terraform plan -destroy -input=false
         if: inputs.action == 'destroy-plan' && steps.destroy-backend.outputs.state_exists == 'true'
-        run: terraform plan -destroy -input=false
-      - name: Create saved Terraform destroy plan
+      - run: terraform plan -destroy -input=false -out=destroy.tfplan
         if: inputs.action == 'destroy' && steps.destroy-backend.outputs.state_exists == 'true'
-        run: terraform plan -destroy -input=false -out=destroy.tfplan
-      - name: Apply saved Terraform destroy plan
+      - run: terraform apply -input=false destroy.tfplan
         if: inputs.action == 'destroy' && steps.destroy-backend.outputs.state_exists == 'true'
-        run: terraform apply -input=false destroy.tfplan
-      - name: Remove generated Terraform inputs
-        if: always()
+      - if: always()
         run: rm -f terraform.auto.tfvars.json backend.hcl destroy.tfplan
