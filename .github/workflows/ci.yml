@@ -65,7 +65,7 @@ jobs:
     permissions:
       contents: read
     env:
-      ACADEMY_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.academy_mode == true) }}
+      ACADEMY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
@@ -140,7 +140,7 @@ jobs:
       contents: read
     env:
       TF_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml') }}
-      ACADEMY_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.academy_mode == true) }}
+      ACADEMY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
