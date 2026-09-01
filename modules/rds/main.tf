@@ -10,6 +10,9 @@ resource "aws_db_parameter_group" "this" {
   parameter {
     name  = "rds.force_ssl"
     value = "1"
+    # RDS records this one as pending-reboot. Leaving apply_method unset makes
+    # Terraform default to "immediate" and propose reverting it on every plan.
+    apply_method = "pending-reboot"
   }
 }
 
@@ -40,14 +43,13 @@ resource "aws_security_group" "db" {
     }
   }
 
-  egress {
-    # PostgreSQL replies use stateful return traffic; the database has no
-    # outbound dependency and therefore needs no permitted egress destinations.
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = []
-  }
+  # PostgreSQL replies use stateful return traffic; the database has no outbound
+  # dependency and therefore needs no permitted egress destinations. Declared as
+  # an empty list rather than a block with no destinations: AWS creates no rule
+  # for the latter, so Terraform proposed adding it on every single plan. The
+  # empty list still suppresses the default allow-all rule, which omitting the
+  # argument entirely would not do, since egress is Optional+Computed.
+  egress = []
 
   lifecycle {
     precondition {
