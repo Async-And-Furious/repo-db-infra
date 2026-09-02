@@ -1,6 +1,24 @@
 name: Terraform CI/CD
 
 on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Terraform environment
+        required: true
+        type: string
+      action:
+        description: Terraform operation
+        required: true
+        type: string
+      academy_mode:
+        description: Use AWS Academy temporary credentials
+        required: true
+        type: boolean
+      confirm:
+        description: Destroy confirmation
+        required: false
+        type: string
   pull_request:
   push:
     branches: [main, develop]
@@ -58,14 +76,14 @@ jobs:
     needs: validate
     if: >-
       (github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'main')) ||
-      (github.event_name == 'workflow_dispatch' && (inputs.action == 'plan' || inputs.action == 'apply'))
+      ((github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && (inputs.action == 'plan' || inputs.action == 'apply'))
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}
     permissions:
       contents: read
     env:
-      ACADEMY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true }}
+      ACADEMY_MODE: ${{ inputs.academy_mode == true }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
@@ -132,7 +150,7 @@ jobs:
     needs: plan
     if: >-
       (github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'main')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.action == 'apply')
+      ((github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.action == 'apply')
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}
@@ -140,7 +158,7 @@ jobs:
       contents: read
     env:
       TF_ENVIRONMENT: ${{ inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml') }}
-      ACADEMY_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true }}
+      ACADEMY_MODE: ${{ inputs.academy_mode == true }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
@@ -192,7 +210,7 @@ jobs:
   destroy:
     name: Guarded HML destroy
     needs: validate
-    if: github.event_name == 'workflow_dispatch' && (inputs.action == 'destroy-plan' || inputs.action == 'destroy')
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && (inputs.action == 'destroy-plan' || inputs.action == 'destroy')
     runs-on: ubuntu-latest
     environment:
       name: hml
