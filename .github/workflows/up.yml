@@ -1,0 +1,17 @@
+name: Terraform HML Apply
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    uses: ./.github/workflows/ci.yml
+    with:
+      environment: hml
+      action: apply
+      academy_mode: false
+      confirm: ''
+    secrets: inherit

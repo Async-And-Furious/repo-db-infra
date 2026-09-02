@@ -1,0 +1,22 @@
+name: Terraform HML Destroy (Confirmed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DESTROY HML to confirm deletion
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  destroy:
+    uses: ./.github/workflows/ci.yml
+    with:
+      environment: hml
+      action: destroy
+      academy_mode: false
+      confirm: ${{ inputs.confirm }}
+    secrets: inherit
