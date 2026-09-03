@@ -28,7 +28,7 @@ data "terraform_remote_state" "k8s_infra" {
 locals {
   is_hml     = var.environment == "hml"
   vpc_id     = data.terraform_remote_state.k8s_infra.outputs.vpc_id
-  subnet_ids = var.destroy_mode ? data.terraform_remote_state.k8s_infra.outputs.public_subnet_ids : (local.is_hml ? var.hml_public_subnet_ids : var.prod_private_subnet_ids)
+  subnet_ids = var.destroy_mode ? data.terraform_remote_state.k8s_infra.outputs.public_subnet_ids : (local.is_hml ? var.hml_public_subnet_ids : data.terraform_remote_state.k8s_infra.outputs.private_subnet_ids)
   allowed_security_group_ids = local.is_hml ? [] : distinct(concat(
     var.prod_allowed_security_group_ids,
     var.prod_lambda_security_group_ids,
@@ -73,10 +73,10 @@ resource "terraform_data" "input_contract" {
     precondition {
       condition = var.destroy_mode || (local.is_hml ? (
         length(var.hml_public_subnet_ids) >= 2 && length(var.hml_allowed_cidr_blocks) > 0 &&
-        length(var.prod_private_subnet_ids) == 0 && length(var.prod_allowed_security_group_ids) == 0 &&
+        length(var.prod_allowed_security_group_ids) == 0 &&
         length(var.prod_lambda_security_group_ids) == 0
         ) : (
-        length(var.prod_private_subnet_ids) >= 2 &&
+        length(local.subnet_ids) >= 2 &&
         length(var.hml_public_subnet_ids) == 0 && length(var.hml_allowed_cidr_blocks) == 0
       ))
       error_message = "Inputs must be environment-scoped: HML requires public subnets and allowed CIDRs; PROD rejects them and uses private subnets/security groups."
