@@ -80,7 +80,8 @@ resource "aws_db_instance" "this" {
   vpc_security_group_ids = [aws_security_group.db.id]
   parameter_group_name   = aws_db_parameter_group.this.name
 
-  backup_retention_period    = local.is_prod ? 7 : 1
+  # AWS Free Tier permits at most one day of automated backups.
+  backup_retention_period    = local.is_prod ? 1 : 1
   auto_minor_version_upgrade = true
   multi_az                   = local.is_prod
 
