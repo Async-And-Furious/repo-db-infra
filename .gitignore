@@ -2,5 +2,9 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.auto.tfvars.json
 !*.tfvars.example
-.terraform.lock.hcl
+.claude/
+
+# Generated per-environment by .github/scripts/bootstrap-backend.sh
+backend.hcl
