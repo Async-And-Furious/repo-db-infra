@@ -31,12 +31,6 @@ variable "hml_allowed_cidr_blocks" {
   default     = []
 }
 
-variable "prod_private_subnet_ids" {
-  description = "Required PROD private subnet IDs owned by repo-k8s-infra"
-  type        = list(string)
-  default     = []
-}
-
 variable "prod_allowed_security_group_ids" {
   description = "Additional PROD consumer security groups"
   type        = list(string)
