@@ -70,6 +70,22 @@ if jq -e '[.resources[]? | select(.mode == "managed")] | length == 0' "$state_fi
   exit 0
 fi
 
+# Prefer the identifier recorded in state, but only accept this repository's
+# deterministic environment name. This prevents a stale or unrelated state
+# value from becoming an AWS CLI target.
+db_identifier=$(jq -r --arg environment "$environment" '
+  [
+    .resources[]?
+    | select(.mode == "managed" and .type == "aws_db_instance" and .name == "this")
+    | .instances[]?.attributes
+    | (.identifier // .id)
+  ]
+  | map(select(type == "string" and . == ("tc3-db-" + $environment)))
+  | .[0] // empty
+' "$state_file")
+db_identifier=${db_identifier:-tc3-db-$environment}
+echo "db_identifier=$db_identifier" >> "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
+
 jq -n \
   --arg environment "$environment" \
   --arg aws_region "$region" \

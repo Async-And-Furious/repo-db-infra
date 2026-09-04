@@ -261,6 +261,27 @@ jobs:
         run: bash .github/scripts/read-backend.sh repo-db-infra "${{ inputs.environment }}"
       - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
         if: steps.destroy-backend.outputs.state_exists == 'true'
+      - name: Disable RDS deletion protection before confirmed destroy
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.action == 'destroy' &&
+          ((inputs.environment == 'prod' && inputs.confirm == 'DESTROY PROD') ||
+          (inputs.environment == 'hml' && inputs.confirm == 'DESTROY HML')) &&
+          steps.destroy-backend.outputs.state_exists == 'true'
+        env:
+          DB_IDENTIFIER: ${{ steps.destroy-backend.outputs.db_identifier }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DB_IDENTIFIER" == "tc3-db-${{ inputs.environment }}" ]] || {
+            echo 'Refusing to modify an unexpected DB identifier.' >&2
+            exit 1
+          }
+          aws rds modify-db-instance \
+            --db-instance-identifier "$DB_IDENTIFIER" \
+            --no-deletion-protection
+          aws rds wait db-instance-available \
+            --db-instance-identifier "$DB_IDENTIFIER"
       - run: terraform plan -destroy -input=false
         if: inputs.action == 'destroy-plan' && steps.destroy-backend.outputs.state_exists == 'true'
       - run: terraform plan -destroy -input=false -out=destroy.tfplan
