@@ -1,5 +1,11 @@
 # Agent log
 
+## 2026-09-04 Route-table-free production destroy fallback
+
+- Destroy mode no longer looks up subnet route tables, which may already be
+  removed by K8s teardown. Normal apply route-table discovery and its network
+  guardrails remain unchanged. No Terraform destroy was run.
+
 ## 2026-09-04 Production destroy without K8s state
 
 - Changed destroy discovery to recover VPC, DB subnets, and environment-specific
