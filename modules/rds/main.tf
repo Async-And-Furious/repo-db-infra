@@ -87,7 +87,7 @@ resource "aws_db_instance" "this" {
 
   skip_final_snapshot       = !local.is_prod
   final_snapshot_identifier = local.is_prod ? "tc3-db-${var.environment}-final-${random_id.final_snapshot.hex}" : null
-  deletion_protection       = local.is_prod
+  deletion_protection       = local.is_prod && !var.destroy_mode
   copy_tags_to_snapshot     = true
 
   lifecycle {

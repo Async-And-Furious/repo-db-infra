@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-09-04
+
+- Added guarded production destroy dispatch support using the protected
+  `production` Environment and exact `DESTROY PROD` confirmation. State discovery
+  now follows the requested environment, and destroy network inputs come from
+  K8s remote state without manual subnet variables. No destroy was run.
+
 ## 2026-08-22
 
 - Unified the database infrastructure changes on `unify/pr4-db` without

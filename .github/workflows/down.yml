@@ -1,10 +1,10 @@
-name: Terraform HML Destroy (Confirmed)
+name: Terraform Destroy (Confirmed)
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: Type DESTROY HML to confirm deletion
+        description: Type DESTROY HML to confirm HML deletion
         required: true
         type: string
 

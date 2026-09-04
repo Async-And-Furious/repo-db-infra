@@ -16,7 +16,7 @@ on:
         required: true
         type: boolean
       confirm:
-        description: Destroy confirmation
+        description: Destroy confirmation (DESTROY HML or DESTROY PROD)
         required: false
         type: string
     secrets:
@@ -214,12 +214,15 @@ jobs:
         run: rm -f backend.hcl terraform.tfplan
 
   destroy:
-    name: Guarded HML destroy
+    name: Guarded ${{ inputs.environment == 'prod' && 'production' || 'HML' }} destroy
     needs: validate
-    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && (inputs.action == 'destroy-plan' || inputs.action == 'destroy')
+    if: >-
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_call' && inputs.environment == 'hml')) &&
+      (inputs.action == 'destroy-plan' || inputs.action == 'destroy')
     runs-on: ubuntu-latest
     environment:
-      name: hml
+      name: ${{ inputs.environment == 'prod' && 'production' || 'hml' }}
     permissions:
       contents: read
     env:
@@ -231,10 +234,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "${{ inputs.environment }}" == hml ]] || { echo 'Destroy is HML-only.' >&2; exit 1; }
+          [[ "${{ inputs.environment }}" == hml || "${{ inputs.environment }}" == prod ]] || { echo 'Destroy environment must be hml or prod.' >&2; exit 1; }
+          if [[ "${{ inputs.environment }}" == prod && "${{ github.event_name }}" != workflow_dispatch ]]; then
+            echo 'Production destroy is available only through workflow_dispatch.' >&2
+            exit 1
+          fi
           [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" ]] || { echo 'Destroy requires AWS credentials.' >&2; exit 1; }
           if [[ "${{ inputs.action }}" == destroy ]]; then
-            [[ "${{ inputs.confirm }}" == 'DESTROY HML' ]] || { echo 'Destroy requires confirm="DESTROY HML".' >&2; exit 1; }
+            expected_confirmation='DESTROY HML'
+            [[ "${{ inputs.environment }}" == prod ]] && expected_confirmation='DESTROY PROD'
+            [[ "${{ inputs.confirm }}" == "$expected_confirmation" ]] || { echo "Destroy requires confirm=\"$expected_confirmation\"." >&2; exit 1; }
           fi
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -249,7 +258,7 @@ jobs:
       - name: Locate existing state without bootstrapping
         id: destroy-backend
         shell: bash
-        run: bash .github/scripts/read-backend.sh repo-db-infra hml
+        run: bash .github/scripts/read-backend.sh repo-db-infra "${{ inputs.environment }}"
       - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
         if: steps.destroy-backend.outputs.state_exists == 'true'
       - run: terraform plan -destroy -input=false

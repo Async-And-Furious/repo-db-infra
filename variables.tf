@@ -8,7 +8,7 @@ variable "environment" {
 }
 
 variable "destroy_mode" {
-  description = "Use live HML K8s remote-state network outputs for an HML-only destroy"
+  description = "Use live K8s remote-state network outputs during a controlled destroy"
   type        = bool
   default     = false
 }
