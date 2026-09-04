@@ -12,7 +12,7 @@ output=${3:-backend.hcl}
 tfvars_output=${4:-terraform.auto.tfvars.json}
 region=${AWS_REGION:?AWS_REGION is required}
 
-[[ "$environment" == hml ]] || { echo 'Destroy backend discovery is HML-only.' >&2; exit 1; }
+[[ "$environment" == hml || "$environment" == prod ]] || { echo 'Environment must be hml or prod.' >&2; exit 1; }
 
 account_id=$(aws sts get-caller-identity --query Account --output text)
 echo "::add-mask::$account_id"

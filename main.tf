@@ -28,7 +28,7 @@ data "terraform_remote_state" "k8s_infra" {
 locals {
   is_hml     = var.environment == "hml"
   vpc_id     = data.terraform_remote_state.k8s_infra.outputs.vpc_id
-  subnet_ids = var.destroy_mode ? data.terraform_remote_state.k8s_infra.outputs.public_subnet_ids : (local.is_hml ? var.hml_public_subnet_ids : data.terraform_remote_state.k8s_infra.outputs.private_subnet_ids)
+  subnet_ids = var.destroy_mode ? (local.is_hml ? data.terraform_remote_state.k8s_infra.outputs.public_subnet_ids : data.terraform_remote_state.k8s_infra.outputs.private_subnet_ids) : (local.is_hml ? var.hml_public_subnet_ids : data.terraform_remote_state.k8s_infra.outputs.private_subnet_ids)
   allowed_security_group_ids = local.is_hml ? [] : distinct(concat(
     var.prod_allowed_security_group_ids,
     var.prod_lambda_security_group_ids,
@@ -53,7 +53,7 @@ data "aws_route_table" "selected" {
 }
 
 locals {
-  allowed_cidr_blocks = var.destroy_mode ? [data.aws_vpc.selected.cidr_block] : var.hml_allowed_cidr_blocks
+  allowed_cidr_blocks = var.destroy_mode ? (local.is_hml ? [data.aws_vpc.selected.cidr_block] : []) : var.hml_allowed_cidr_blocks
   selected_availability_zones = distinct([
     for subnet in data.aws_subnet.selected : subnet.availability_zone
   ])
@@ -66,10 +66,6 @@ locals {
 
 resource "terraform_data" "input_contract" {
   lifecycle {
-    precondition {
-      condition     = !var.destroy_mode || local.is_hml
-      error_message = "destroy_mode is HML-only; production destroy is disabled."
-    }
     precondition {
       condition = var.destroy_mode || (local.is_hml ? (
         length(var.hml_public_subnet_ids) >= 2 && length(var.hml_allowed_cidr_blocks) > 0 &&
@@ -123,4 +119,5 @@ module "rds" {
   alarm_actions                      = var.alarm_actions
   alarm_ok_actions                   = var.alarm_ok_actions
   final_snapshot_revision            = var.final_snapshot_revision
+  destroy_mode                       = var.destroy_mode
 }

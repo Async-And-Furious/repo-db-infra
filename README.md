@@ -110,12 +110,15 @@ List values are JSON strings, for example
 `final_snapshot_revision` must be nonempty; increment the PROD value before a
 destructive replacement so its final snapshot identifier cannot collide.
 
-### HML destroy
+### Controlled destroy
 
-`destroy-plan` and `destroy` are manual, HML-only operations and require the
+`destroy-plan` and `destroy` are manual operations. HML remains available through
+the existing `down.yml` workflow. Production is available only by dispatching
+`ci.yml` directly and is gated by the protected `production` Environment. Both require the
 explicit `academy_mode=true` input plus all three AWS Academy temporary
-credentials. Production destroy is rejected.
-`destroy` additionally requires confirmation exactly `DESTROY HML`; it saves a
+credentials. Production destroy requires confirmation exactly `DESTROY PROD`.
+`destroy` additionally requires confirmation exactly `DESTROY HML` for HML or
+`DESTROY PROD` for production; it saves a
 destroy plan and applies that exact plan. `destroy-plan` only runs
 `terraform plan -destroy` and does not apply it.
 
@@ -125,10 +128,10 @@ Terraform state is a successful no-op; access failures fail closed. Terraform
 retains the state object and bucket after resource deletion. HML RDS deletion
 uses the existing `skip_final_snapshot = true` semantics, so **no final RDS
 snapshot is created**. Production database snapshot semantics are unchanged.
-Destroy tfvars contain only `environment=hml`, `destroy_mode=true`, and the AWS
-region; destroy does not consume deploy-time GitHub variables. In destroy mode,
-Terraform derives the public subnet IDs from the live K8s remote-state output
-and the allowed CIDR from that output's VPC. The K8s state and VPC must still
+Destroy tfvars contain only the requested environment, `destroy_mode=true`, and
+the AWS region; destroy does not consume deploy-time GitHub variables. In destroy
+mode, Terraform derives the environment's subnet IDs from the live K8s remote-state
+output without manual subnet variables. The K8s state and VPC must still
 exist, so destroy the DB before destroying K8s infrastructure.
 
 ## Naming
