@@ -13,9 +13,10 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 # RFC-004: repo-k8s-infra owns the VPC and publishes vpc_id/subnet/node-SG
-# outputs. Read them from its state directly instead of requiring manual
-# copy-paste into tfvars for every environment.
+# outputs. Normal apply reads those outputs; destroy uses values preserved in
+# the DB state so it remains possible after K8s has been destroyed.
 data "terraform_remote_state" "k8s_infra" {
+  count   = var.destroy_mode ? 0 : 1
   backend = "s3"
 
   config = {
@@ -27,13 +28,13 @@ data "terraform_remote_state" "k8s_infra" {
 
 locals {
   is_hml     = var.environment == "hml"
-  vpc_id     = data.terraform_remote_state.k8s_infra.outputs.vpc_id
-  subnet_ids = var.destroy_mode ? (local.is_hml ? data.terraform_remote_state.k8s_infra.outputs.public_subnet_ids : data.terraform_remote_state.k8s_infra.outputs.private_subnet_ids) : (local.is_hml ? var.hml_public_subnet_ids : data.terraform_remote_state.k8s_infra.outputs.private_subnet_ids)
-  allowed_security_group_ids = local.is_hml ? [] : distinct(concat(
+  vpc_id     = var.destroy_mode ? var.destroy_vpc_id : data.terraform_remote_state.k8s_infra[0].outputs.vpc_id
+  subnet_ids = var.destroy_mode ? var.destroy_subnet_ids : (local.is_hml ? var.hml_public_subnet_ids : data.terraform_remote_state.k8s_infra[0].outputs.private_subnet_ids)
+  allowed_security_group_ids = var.destroy_mode ? var.destroy_allowed_security_group_ids : (local.is_hml ? [] : distinct(concat(
     var.prod_allowed_security_group_ids,
     var.prod_lambda_security_group_ids,
-    [data.terraform_remote_state.k8s_infra.outputs.node_security_group_id]
-  ))
+    [data.terraform_remote_state.k8s_infra[0].outputs.node_security_group_id]
+  )))
 }
 
 data "aws_vpc" "selected" {
@@ -53,7 +54,7 @@ data "aws_route_table" "selected" {
 }
 
 locals {
-  allowed_cidr_blocks = var.destroy_mode ? (local.is_hml ? [data.aws_vpc.selected.cidr_block] : []) : var.hml_allowed_cidr_blocks
+  allowed_cidr_blocks = var.destroy_mode ? var.destroy_allowed_cidr_blocks : var.hml_allowed_cidr_blocks
   selected_availability_zones = distinct([
     for subnet in data.aws_subnet.selected : subnet.availability_zone
   ])

@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-09-04 Production destroy without K8s state
+
+- Changed destroy discovery to recover VPC, DB subnets, and environment-specific
+  ingress values from the existing DB Terraform state. Destroy mode skips the
+  K8s remote-state data source; normal apply discovery is unchanged. No destroy
+  or AWS apply was run.
+
 ## 2026-09-04
 
 - Added guarded production destroy dispatch support using the protected

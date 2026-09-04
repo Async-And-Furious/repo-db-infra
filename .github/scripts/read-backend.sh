@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Locate an existing account-qualified S3 state without creating or configuring
 # any AWS backend resources. Missing or empty state is a successful no-op.
-# It also writes the minimum deterministic inputs for Terraform to derive the
-# destroy network configuration from the still-existing K8s remote state.
+# It also writes destroy inputs from the existing DB resources. This deliberately
+# does not read K8s state: K8s may already be gone when DB cleanup is needed.
 # Usage: read-backend.sh <state-prefix> <environment> [backend-output] [tfvars-output]
 set -euo pipefail
 
@@ -70,10 +70,35 @@ if jq -e '[.resources[]? | select(.mode == "managed")] | length == 0' "$state_fi
   exit 0
 fi
 
+subnet_ids=$(jq -c '[.resources[]? | select(.mode == "managed" and .type == "aws_db_subnet_group" and .name == "this") | .instances[]?.attributes.subnet_ids[]?] | unique' "$state_file")
+vpc_id=$(jq -r '[.resources[]? | select(.mode == "managed" and .type == "aws_security_group" and .name == "db") | .instances[]?.attributes.vpc_id] | map(select(type == "string" and length > 0)) | .[0] // empty' "$state_file")
+security_group_ids=$(jq -c '[.resources[]? | select(.mode == "managed" and .type == "aws_security_group" and .name == "db") | .instances[]?.attributes.ingress[]?.security_groups[]?] | unique' "$state_file")
+cidr_blocks=$(jq -c '[.resources[]? | select(.mode == "managed" and .type == "aws_security_group" and .name == "db") | .instances[]?.attributes.ingress[]?.cidr_blocks[]?] | unique' "$state_file")
+
+[[ "$vpc_id" != "" && $(jq 'length' <<<"$subnet_ids") -ge 2 ]] || {
+  echo 'Existing DB state does not contain VPC and subnet attributes required for destroy.' >&2
+  exit 1
+}
+if [[ "$environment" == prod && $(jq 'length' <<<"$security_group_ids") -eq 0 ]]; then
+  echo 'Existing PROD DB state does not contain security-group ingress attributes required for destroy.' >&2
+  exit 1
+fi
+if [[ "$environment" == hml && $(jq 'length' <<<"$cidr_blocks") -eq 0 ]]; then
+  echo 'Existing HML DB state does not contain CIDR ingress attributes required for destroy.' >&2
+  exit 1
+fi
+
 jq -n \
   --arg environment "$environment" \
   --arg aws_region "$region" \
-  '{environment: $environment, aws_region: $aws_region, destroy_mode: true}' \
+  --arg destroy_vpc_id "$vpc_id" \
+  --argjson destroy_subnet_ids "$subnet_ids" \
+  --argjson destroy_allowed_security_group_ids "$security_group_ids" \
+  --argjson destroy_allowed_cidr_blocks "$cidr_blocks" \
+  '{environment: $environment, aws_region: $aws_region, destroy_mode: true,
+    destroy_vpc_id: $destroy_vpc_id, destroy_subnet_ids: $destroy_subnet_ids,
+    destroy_allowed_security_group_ids: $destroy_allowed_security_group_ids,
+    destroy_allowed_cidr_blocks: $destroy_allowed_cidr_blocks}' \
   > "$tfvars_output"
 
 cat > "$output" <<EOF
