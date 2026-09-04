@@ -48,7 +48,9 @@ data "aws_subnet" "selected" {
 }
 
 data "aws_route_table" "selected" {
-  for_each = data.aws_subnet.selected
+  # K8s teardown can remove these before the DB destroy; existing RDS resources
+  # only need the VPC and subnet IDs to be reconstructed in destroy mode.
+  for_each = var.destroy_mode ? {} : data.aws_subnet.selected
 
   subnet_id = each.value.id
 }
@@ -91,15 +93,15 @@ resource "terraform_data" "input_contract" {
       error_message = "Every selected database subnet must belong to the selected VPC."
     }
     precondition {
-      condition     = alltrue([for route_table in data.aws_route_table.selected : route_table.vpc_id == local.vpc_id])
+      condition     = var.destroy_mode || alltrue([for route_table in data.aws_route_table.selected : route_table.vpc_id == local.vpc_id])
       error_message = "Every selected database route table must belong to the selected VPC."
     }
     precondition {
-      condition = local.is_hml ? alltrue([
+      condition = var.destroy_mode || (local.is_hml ? alltrue([
         for has_igw_route in values(local.selected_has_igw_route) : has_igw_route
         ]) : alltrue([
         for has_igw_route in values(local.selected_has_igw_route) : !has_igw_route
-      ])
+      ]))
       error_message = "HML database subnets must have Internet Gateway routes; PROD database subnets must not have them."
     }
   }
