@@ -128,11 +128,11 @@ Terraform state is a successful no-op; access failures fail closed. Terraform
 retains the state object and bucket after resource deletion. HML RDS deletion
 uses the existing `skip_final_snapshot = true` semantics, so **no final RDS
 snapshot is created**. Production database snapshot semantics are unchanged.
-Destroy tfvars contain only the requested environment, `destroy_mode=true`, and
-the AWS region; destroy does not consume deploy-time GitHub variables. In destroy
-mode, Terraform derives the environment's subnet IDs from the live K8s remote-state
-output without manual subnet variables. The K8s state and VPC must still
-exist, so destroy the DB before destroying K8s infrastructure.
+Destroy tfvars contain the requested environment, `destroy_mode=true`, the AWS
+region, and VPC/subnet/ingress values recovered from existing DB state; destroy
+does not consume deploy-time GitHub variables. Normal apply still discovers
+network values from K8s remote state. Destroy therefore remains possible after
+K8s teardown, provided the DB state and referenced AWS network resources remain.
 
 ## Naming
 
