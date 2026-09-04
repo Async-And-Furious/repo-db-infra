@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-09-04 Production destroy protection
+
+- Added an exact-confirmation, workflow-dispatch-only pre-destroy step that
+  safely resolves the environment DB from existing state (with deterministic
+  naming fallback), disables RDS deletion protection, and waits for availability
+  before creating and applying the destroy plan. No destroy was run.
+
 ## 2026-09-04
 
 - Added guarded production destroy dispatch support using the protected
