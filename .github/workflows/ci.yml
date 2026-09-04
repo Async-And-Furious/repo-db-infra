@@ -94,7 +94,6 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-      HML_PUBLIC_SUBNET_IDS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_PUBLIC_SUBNET_IDS || '' }}
       HML_ALLOWED_CIDR_BLOCKS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'hml' && vars.HML_ALLOWED_CIDR_BLOCKS || '' }}
       PROD_ALLOWED_SECURITY_GROUP_IDS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'prod' && vars.PROD_ALLOWED_SECURITY_GROUP_IDS || '' }}
       PROD_LAMBDA_SECURITY_GROUP_IDS: ${{ (inputs.environment || (github.ref_name == 'main' && 'prod' || 'hml')) == 'prod' && vars.PROD_LAMBDA_SECURITY_GROUP_IDS || '' }}

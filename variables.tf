@@ -43,12 +43,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "hml_public_subnet_ids" {
-  description = "HML-only public subnet IDs, supplied per environment because the current K8s state does not publish them"
-  type        = list(string)
-  default     = []
-}
-
 variable "hml_allowed_cidr_blocks" {
   description = "Required HML-only PostgreSQL client CIDRs; never use a public catch-all"
   type        = list(string)
