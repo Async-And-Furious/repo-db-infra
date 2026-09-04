@@ -80,3 +80,9 @@
   environment to plan artifact names and apply downloads. Production approval
   and manual HML-only destroy semantics remain unchanged; no AWS apply/destroy,
   commit, or push was performed.
+
+## 2026-09-03
+
+- Reduced automated RDS backup retention to the AWS Free Tier maximum of one day
+  for both environments. Production privacy, multi-AZ, deletion protection and
+  final-snapshot protections are unchanged; no AWS apply was run.
