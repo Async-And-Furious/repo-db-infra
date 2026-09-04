@@ -1,16 +1,17 @@
 # repo-db-infra
 
-Tech Challenge Fase 3 managed PostgreSQL 16 on RDS. RFC-007 is selected as an
-HML-only public exception; PROD remains private.
+Tech Challenge Fase 3 managed PostgreSQL 16 on RDS. Both HML and PROD remain
+private.
 
 ## Ownership and security
 
 This repository owns the RDS instance, subnet group, parameter group, database
 security group, alarms and Secrets Manager reference. `repo-k8s-infra` owns the
-VPC; RFC-004 remote state is mandatory. HML public subnet IDs and CIDRs are
-explicit environment-scoped inputs. They must be public subnets with IGW
-routes across at least two AZs, and narrow CIDRs (never `0.0.0.0/0`/`::/0`).
-PROD uses private subnets and SG-only ingress. The named outputs
+VPC; RFC-004 remote state is mandatory. Both environments consume private
+subnets from matching K8s remote-state outputs. HML allowed CIDRs are
+explicit environment-scoped inputs. The K8s private subnets must span at least
+two AZs, and CIDRs remain narrow (never `0.0.0.0/0`/`::/0`).
+RDS is never publicly accessible. PROD uses SG-only ingress. The named outputs
 `db_host`, `db_port`, `db_name`, `db_ssl_mode` and
 `db_connection_secret_arn` are the application handoff. The deployment uses
 the first four values to build `DATABASE_URL` and uses the last value to fetch
@@ -94,7 +95,7 @@ values and credentials to planning and applying; production approval remains
 required for the protected `production` Environment.
 Configure the environment-scoped values used by CI:
 
-- HML vars: `HML_PUBLIC_SUBNET_IDS`, `HML_ALLOWED_CIDR_BLOCKS`,
+- HML vars: `HML_ALLOWED_CIDR_BLOCKS`,
   `HML_ALARM_CPU_THRESHOLD`, `HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES`,
   `HML_ALARM_CONNECTIONS_THRESHOLD`, `HML_FINAL_SNAPSHOT_REVISION`.
 - PROD vars: `PROD_ALLOWED_SECURITY_GROUP_IDS`,

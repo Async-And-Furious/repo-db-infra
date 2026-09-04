@@ -96,8 +96,8 @@ resource "aws_db_instance" "this" {
       error_message = "RDS public exposure must match the explicitly selected environment policy."
     }
     precondition {
-      condition     = local.is_prod ? var.publicly_accessible == false : var.publicly_accessible == true
-      error_message = "HML must be public and PROD must be private; this exception is HML-only."
+      condition     = var.publicly_accessible == false
+      error_message = "RDS must remain private in every environment."
     }
   }
 }
