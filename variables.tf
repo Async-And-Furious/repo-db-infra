@@ -8,9 +8,33 @@ variable "environment" {
 }
 
 variable "destroy_mode" {
-  description = "Use live K8s remote-state network outputs during a controlled destroy"
+  description = "Use DB-state network inputs during a controlled destroy"
   type        = bool
   default     = false
+}
+
+variable "destroy_vpc_id" {
+  description = "VPC ID recorded in the existing DB state for destroy mode"
+  type        = string
+  default     = ""
+}
+
+variable "destroy_subnet_ids" {
+  description = "DB subnet IDs recorded in the existing DB state for destroy mode"
+  type        = list(string)
+  default     = []
+}
+
+variable "destroy_allowed_security_group_ids" {
+  description = "PROD DB ingress security groups recorded in the existing DB state"
+  type        = list(string)
+  default     = []
+}
+
+variable "destroy_allowed_cidr_blocks" {
+  description = "HML DB ingress CIDRs recorded in the existing DB state"
+  type        = list(string)
+  default     = []
 }
 
 variable "aws_region" {
