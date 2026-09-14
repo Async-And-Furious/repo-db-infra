@@ -1,59 +1,68 @@
-# RFC-007 — HML public RDS exception
+# RFC-007 — Exceção de RDS público no HML
 
-- **Status**: Superseded; HML is private like PROD
-- **Owner**: Tech Challenge infrastructure team
+- **Status**: Superseded; o HML é privado, assim como o PROD
+- **Owner**: Time de infraestrutura do Tech Challenge
 - **Decision date**: 2026-08-23
-- **Scope**: Historical HML exception; current policy covers HML and PROD.
+- **Scope**: Exceção histórica do HML; a política atual cobre HML e PROD.
 
-## Decision and controls
+## Decisão e controles
 
-HML uses the private subnet IDs published by matching `repo-k8s-infra` remote
-state and `publicly_accessible = false`. PostgreSQL ingress remains CIDR only
-from the explicitly supplied `hml_allowed_cidr_blocks`; CIDRs must be narrow
-and never `0.0.0.0/0` or `::/0`.
+O HML usa os IDs de subnet privada publicados pelo remote state
+correspondente do `repo-k8s-infra` e `publicly_accessible = false`. O
+ingress do PostgreSQL permanece somente por CIDR, a partir dos
+`hml_allowed_cidr_blocks` explicitamente fornecidos; os CIDRs precisam ser
+estreitos e nunca `0.0.0.0/0` ou `::/0`.
 
-PROD selects private subnets from the K8s remote state, is not publicly
-accessible, and permits only the remote-state EKS
-consumer SG plus explicitly supplied Lambda/consumer SGs. Public subnet and
-CIDR inputs are rejected for PROD; HML inputs are rejected for PROD routing.
+O PROD seleciona subnets privadas a partir do remote state do K8s, não é
+publicamente acessível, e permite apenas o SG do consumidor EKS do remote
+state mais os SGs de Lambda/consumidor explicitamente fornecidos. Inputs de
+subnet pública e de CIDR são rejeitados para o PROD; inputs do HML são
+rejeitados para o roteamento do PROD.
 
-## Mandatory prerequisites
+## Pré-requisitos obrigatórios
 
-- TLS: the PostgreSQL parameter group sets `rds.force_ssl=1`; Lambda and Prisma
-  clients must use SSL. Separate monolith RFC approval and the monolith/auth
-  SSL consumer follow-up remain pending; that consumer is intentionally not
-  modified here.
-- Secrets: RDS manages the master password in Secrets Manager; consumers use
-  the stable `db_connection_secret_arn` output and fetch it at runtime. No
-  password variable or plaintext secret is allowed. The application handoff
-  also uses the explicit `db_host`, `db_port`, `db_name`, and `db_ssl_mode`
-  outputs; `db_ssl_mode` is `require`.
-- Backups/recovery: encryption, copy tags, backups, and a collision-safe PROD
-  final snapshot are enabled. PROD also has Multi-AZ and deletion protection.
-- Monitoring: configurable CPU, free-storage, and connection alarms use the
-  `DBInstanceIdentifier` dimension and optional SNS alarm/OK action lists.
-  CloudWatch has no public-access metric; Terraform policy/preconditions and
-  this document enforce exposure instead.
-- Snapshot replacement safety: `final_snapshot_revision` is a required,
-  nonempty nonce used to rotate the final snapshot suffix. Increment the PROD
-  revision before a destructive replacement so the identifier cannot collide
-  with an existing snapshot.
+- TLS: o parameter group do PostgreSQL define `rds.force_ssl=1`; os clientes
+  Lambda e Prisma precisam usar SSL. A aprovação de uma RFC separada para o
+  monolito e o follow-up de compatibilidade SSL do consumidor monolito/auth
+  permanecem pendentes; esse consumidor intencionalmente não é modificado
+  aqui.
+- Secrets: o RDS gerencia a senha mestre no Secrets Manager; os consumidores
+  usam o output estável `db_connection_secret_arn` e o buscam em tempo de
+  execução. Nenhuma variável de senha ou secret em texto plano é permitida.
+  O handoff da aplicação também usa os outputs explícitos `db_host`,
+  `db_port`, `db_name` e `db_ssl_mode`; o `db_ssl_mode` é `require`.
+- Backups/recuperação: criptografia, cópia de tags, backups e um snapshot
+  final do PROD à prova de colisão estão habilitados. O PROD também tem
+  Multi-AZ e proteção contra exclusão.
+- Monitoramento: os alarmes configuráveis de CPU, armazenamento livre e
+  conexões usam a dimensão `DBInstanceIdentifier` e listas opcionais de
+  ações de alarme/OK via SNS. O CloudWatch não tem métrica de acesso
+  público; as preconditions/políticas do Terraform e este documento impõem
+  a exposição em vez disso.
+- Segurança na substituição de snapshot: `final_snapshot_revision` é um
+  nonce obrigatório e não vazio, usado para rotacionar o sufixo do snapshot
+  final. Incremente a revisão do PROD antes de uma substituição destrutiva
+  para que o identificador não possa colidir com um snapshot já existente.
 
 ## Rollback
 
-Stop HML traffic, revoke or narrow `hml_allowed_cidr_blocks`, and apply only
-after client SSL compatibility is verified.
-Do not disable PROD protections or destroy shared infrastructure. The separate
-monolith PR #183 is not approval for this exception.
+Interrompa o tráfego do HML, revogue ou restrinja o
+`hml_allowed_cidr_blocks`, e só aplique depois que a compatibilidade SSL do
+cliente for verificada.
+Não desabilite as proteções do PROD nem destrua infraestrutura
+compartilhada. O PR #183 do monolito, em separado, não é uma aprovação para
+esta exceção.
 
-## Application handoff
+## Handoff para a aplicação
 
-The database and application repositories do not call each other. Once the
-environment-specific database plan has been applied, the application
-deployment reads the named Terraform outputs and, using the same AWS Academy
-temporary access key, secret key, and session token, calls Secrets Manager with
-the secret ARN to obtain the RDS-managed username and password. It builds
-`DATABASE_URL` with SSL required and injects it as a runtime secret. HML and
-PROD state and credentials remain separate; the protected `production`
-Environment still gates the exact saved-plan apply. HML destroy remains the
-only permitted destroy operation and does not produce an application handoff.
+O repositório de banco de dados e o repositório de aplicação não se chamam
+entre si. Uma vez que o plan específico do ambiente do banco de dados tenha
+sido aplicado, o deploy da aplicação lê os outputs nomeados do Terraform e,
+usando a mesma access key, secret key e session token temporários do AWS
+Academy, chama o Secrets Manager com o ARN do secret para obter o usuário e
+a senha gerenciados pelo RDS. Ele monta a `DATABASE_URL` com SSL obrigatório
+e a injeta como um secret em tempo de execução. O state e as credenciais de
+HML e PROD permanecem separados; o Environment protegido `production`
+continua protegendo o apply do plan exato. O destroy de HML continua sendo a
+única operação de destroy permitida e não produz um handoff para a
+aplicação.

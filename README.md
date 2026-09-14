@@ -1,32 +1,35 @@
 # repo-db-infra
 
-Tech Challenge Fase 3 managed PostgreSQL 16 on RDS. Both HML and PROD remain
-private.
+Tech Challenge Fase 3: PostgreSQL 16 gerenciado no RDS. Tanto HML quanto PROD
+permanecem privados.
 
-## Ownership and security
+## Ownership e segurança
 
-This repository owns the RDS instance, subnet group, parameter group, database
-security group, alarms and Secrets Manager reference. `repo-k8s-infra` owns the
-VPC; RFC-004 remote state is mandatory. Both environments consume private
-subnets from matching K8s remote-state outputs. HML allowed CIDRs are
-explicit environment-scoped inputs. The K8s private subnets must span at least
-two AZs, and CIDRs remain narrow (never `0.0.0.0/0`/`::/0`).
-RDS is never publicly accessible. PROD uses SG-only ingress. The named outputs
-`db_host`, `db_port`, `db_name`, `db_ssl_mode` and
-`db_connection_secret_arn` are the application handoff. The deployment uses
-the first four values to build `DATABASE_URL` and uses the last value to fetch
-the RDS-managed JSON credentials from Secrets Manager. Credential values are
-never Terraform outputs. `connection_contract` remains available as a
-backward-compatible aggregate; consumers should use the named outputs rather
-than depend on its object shape.
+Este repositório é dono da instância RDS, do subnet group, do parameter
+group, do security group do banco, dos alarmes e da referência ao Secrets
+Manager. O `repo-k8s-infra` é dono da VPC; o remote state da RFC-004 é
+obrigatório. Ambos os ambientes consomem subnets privadas a partir dos
+outputs de remote state correspondentes do K8s. Os CIDRs permitidos do HML
+são inputs explícitos por ambiente. As subnets privadas do K8s precisam
+cobrir pelo menos duas AZs, e os CIDRs permanecem estreitos (nunca
+`0.0.0.0/0`/`::/0`).
+O RDS nunca é publicamente acessível. O PROD usa ingress somente por SG. Os
+outputs nomeados `db_host`, `db_port`, `db_name`, `db_ssl_mode` e
+`db_connection_secret_arn` são o handoff para a aplicação. O deploy usa os
+quatro primeiros valores para montar a `DATABASE_URL` e usa o último valor
+para buscar as credenciais JSON gerenciadas pelo RDS no Secrets Manager.
+Valores de credencial nunca são outputs do Terraform. O `connection_contract`
+permanece disponível como um agregado retrocompatível; os consumidores devem
+usar os outputs nomeados em vez de depender do formato do objeto.
 
-RDS enforces `rds.force_ssl=1`; Lambda/Prisma clients must use SSL. The
-review-only monolith/auth consumer needs a follow-up compatibility change and
-is not changed here. See [RFC-007](docs/rfcs/RFC-007-hml-public-rds-exception.md)
-and the [setup runbook](docs/runbooks/aws-setup.md) for owner, expiry,
-secrets, backup, monitoring and rollback prerequisites.
+O RDS impõe `rds.force_ssl=1`; os clientes Lambda/Prisma precisam usar SSL. O
+consumidor monolito/auth, ainda em modo somente leitura, precisa de uma
+mudança de compatibilidade em um follow-up e não é alterado aqui. Veja a
+[RFC-007](docs/rfcs/RFC-007-hml-public-rds-exception.md) e o
+[runbook de setup](docs/runbooks/aws-setup.md) para owner, prazo de
+expiração, secrets, backup, monitoramento e pré-requisitos de rollback.
 
-## Local validation
+## Validação local
 
 ```bash
 terraform fmt -recursive
@@ -34,8 +37,9 @@ terraform init -backend=false -input=false
 terraform validate
 ```
 
-These commands do not need AWS credentials or remote state. A real plan uses
-S3 Terraform state, AWS access, and an already-applied `repo-k8s-infra` state:
+Esses comandos não precisam de credenciais AWS nem de remote state. Um plan
+real usa o Terraform state no S3, acesso AWS, e um state já aplicado do
+`repo-k8s-infra`:
 
 ```bash
 terraform init -reconfigure \
@@ -43,98 +47,107 @@ terraform init -reconfigure \
 terraform plan -input=false
 ```
 
-### Application deployment handoff
+### Handoff de deploy para a aplicação
 
-The database deployment and the application deployment are separate. There is
-no cross-repository API call: after the exact database plan is applied, an
-operator or deployment job, authenticated with the same three AWS Academy
-temporary credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and
-`AWS_SESSION_TOKEN`), reads the named Terraform outputs from the
-environment-specific state. It must fetch `db_connection_secret_arn` with
-`secretsmanager:GetSecretValue` and combine the returned `username` and
-`password` with `db_host`, `db_port`, `db_name`, and `db_ssl_mode=require` to
-form `DATABASE_URL`. The resulting URL is passed to the application as a
-runtime secret and is never committed or printed.
+O deploy do banco de dados e o deploy da aplicação são separados. Não existe
+chamada de API entre os repositórios: depois que o plan exato do banco é
+aplicado, um operador ou job de deploy, autenticado com as mesmas três
+credenciais temporárias do AWS Academy (`AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY` e `AWS_SESSION_TOKEN`), lê os outputs nomeados do
+Terraform a partir do state específico do ambiente. Ele precisa buscar o
+`db_connection_secret_arn` com `secretsmanager:GetSecretValue` e combinar o
+`username` e a `password` retornados com `db_host`, `db_port`, `db_name` e
+`db_ssl_mode=require` para formar a `DATABASE_URL`. A URL resultante é
+passada para a aplicação como um secret em tempo de execução e nunca é
+commitada nem impressa em log.
 
-The output names and meanings are the stable contract:
+Os nomes e significados dos outputs são o contrato estável:
 
-| Output | Application use |
+| Output | Uso na aplicação |
 | --- | --- |
-| `db_host` | PostgreSQL host |
-| `db_port` | PostgreSQL port |
-| `db_name` | Database name |
-| `db_ssl_mode` | Must be `require` |
-| `db_connection_secret_arn` | Secrets Manager lookup identifier |
+| `db_host` | Host do PostgreSQL |
+| `db_port` | Porta do PostgreSQL |
+| `db_name` | Nome do banco de dados |
+| `db_ssl_mode` | Deve ser `require` |
+| `db_connection_secret_arn` | Identificador de busca no Secrets Manager |
 
-Read outputs from the already-selected `hml` or `prod` state; do not mix state
-or environment inputs. The application deployment keeps the same Academy
-credential requirement, and its database inputs are a generated handoff, not
-an invented repository-to-repository API.
+Leia os outputs do state `hml` ou `prod` já selecionado; não misture state
+nem inputs de ambiente. O deploy da aplicação mantém o mesmo requisito de
+credenciais do Academy, e seus inputs de banco de dados são um handoff
+gerado, não uma API inventada entre repositórios.
 
-CI writes the environment-scoped inputs to a temporary
-`terraform.auto.tfvars.json` before planning or applying.
+A CI escreve os inputs específicos de cada ambiente em um
+`terraform.auto.tfvars.json` temporário antes de fazer plan ou apply.
 
-## Backend and CI
+## Backend e CI
 
-State is stored in the live account's `tc3-tfstate-<account-id>` S3 bucket at
-`repo-db-infra/<environment>/terraform.tfstate`. The apply path bootstraps and
-configures this backend. The K8s remote state remains available during DB
-operations because DB resources depend on its VPC and security-group outputs.
+O state é armazenado no bucket S3 `tc3-tfstate-<account-id>` da conta em uso,
+em `repo-db-infra/<environment>/terraform.tfstate`. O caminho de apply faz o
+bootstrap e a configuração desse backend. O remote state do K8s permanece
+disponível durante as operações de banco porque os recursos do DB dependem
+dos outputs de VPC e security group dele.
 
-The workflow's required `validate` job is credential-free. Plans from forked
-pull requests are skipped. A push to `develop` plans and automatically deploys
-HML; a push to `main` plans, then waits for the protected `production` Environment
-approval before applying PROD. Manual PROD applies also require the explicit
-`APPLY PROD` confirmation. Every apply downloads the saved Terraform plan
-artifact produced by the preceding plan job. CI accepts all three AWS Academy
-temporary credentials together for both HML and PROD; production is not OIDC-only.
-Credential, caller identity, state backend and cross-repository network inputs
-are checked before planning. `workflow_dispatch` selects HML or PROD, and the
-The selected GitHub Environment (`hml` or `production`) supplies the scoped
-values and credentials to planning and applying; production approval remains
-required for the protected `production` Environment.
-Configure the environment-scoped values used by CI:
+O job `validate`, obrigatório no workflow, não precisa de credenciais. Plans
+vindos de pull requests de forks são pulados. Um push para `develop` faz o
+plan e aplica automaticamente no HML; um push para `main` faz o plan e então
+aguarda a aprovação do Environment protegido `production` antes de aplicar
+no PROD. Applies manuais em PROD também exigem a confirmação explícita
+`APPLY PROD`. Todo apply baixa o artefato de plan do Terraform salvo pelo job
+de plan anterior. A CI aceita as três credenciais temporárias do AWS Academy
+juntas tanto para HML quanto para PROD; a produção não é exclusivamente
+OIDC. Credenciais, identidade do chamador, backend de state e inputs de rede
+entre repositórios são verificados antes do planejamento. O
+`workflow_dispatch` seleciona HML ou PROD, e o Environment do GitHub
+selecionado (`hml` ou `production`) fornece os valores e credenciais
+específicos para o planejamento e o apply; a aprovação de produção continua
+obrigatória para o Environment protegido `production`.
+Configure os valores específicos de cada ambiente usados pela CI:
 
-- HML vars: `HML_ALLOWED_CIDR_BLOCKS`,
+- Vars do HML: `HML_ALLOWED_CIDR_BLOCKS`,
   `HML_ALARM_CPU_THRESHOLD`, `HML_ALARM_FREE_STORAGE_THRESHOLD_BYTES`,
   `HML_ALARM_CONNECTIONS_THRESHOLD`, `HML_FINAL_SNAPSHOT_REVISION`.
-- PROD vars: `PROD_ALLOWED_SECURITY_GROUP_IDS`,
+- Vars do PROD: `PROD_ALLOWED_SECURITY_GROUP_IDS`,
   `PROD_LAMBDA_SECURITY_GROUP_IDS`, `PROD_ALARM_CPU_THRESHOLD`,
   `PROD_ALARM_FREE_STORAGE_THRESHOLD_BYTES`,
   `PROD_ALARM_CONNECTIONS_THRESHOLD`, `PROD_FINAL_SNAPSHOT_REVISION`.
 - Secrets: `HML_ALARM_ACTIONS`, `HML_ALARM_OK_ACTIONS`, `PROD_ALARM_ACTIONS`,
   `PROD_ALARM_OK_ACTIONS`.
 
-List values are JSON strings, for example
+Valores de lista são strings JSON, por exemplo
 `["subnet-0123456789abcdef0","subnet-0fedcba9876543210"]`,
-`["203.0.113.0/24"]`, or `[]`. Thresholds are decimal numbers.
-`final_snapshot_revision` must be nonempty; increment the PROD value before a
-destructive replacement so its final snapshot identifier cannot collide.
+`["203.0.113.0/24"]`, ou `[]`. Os thresholds são números decimais.
+`final_snapshot_revision` precisa ser não vazio; incremente o valor de PROD
+antes de uma substituição destrutiva para que o identificador do snapshot
+final não colida.
 
-### Controlled destroy
+### Destroy controlado
 
-`destroy-plan` and `destroy` are manual operations. HML remains available through
-the existing `down.yml` workflow. Production is available only by dispatching
-`ci.yml` directly and is gated by the protected `production` Environment. Both require the
-explicit `academy_mode=true` input plus all three AWS Academy temporary
-credentials. Production destroy requires confirmation exactly `DESTROY PROD`.
-`destroy` additionally requires confirmation exactly `DESTROY HML` for HML or
-`DESTROY PROD` for production; it saves a
-destroy plan and applies that exact plan. `destroy-plan` only runs
-`terraform plan -destroy` and does not apply it.
+`destroy-plan` e `destroy` são operações manuais. O HML continua disponível
+pelo workflow `down.yml` existente. A produção só está disponível
+disparando o `ci.yml` diretamente e é protegida pelo Environment protegido
+`production`. Ambos exigem o input explícito `academy_mode=true` mais as
+três credenciais temporárias do AWS Academy. O destroy de produção exige a
+confirmação exata `DESTROY PROD`. O `destroy` também exige a confirmação
+exata `DESTROY HML` para HML ou `DESTROY PROD` para produção; ele salva um
+plan de destroy e aplica exatamente esse plan. O `destroy-plan` apenas
+executa `terraform plan -destroy` e não o aplica.
 
-Destroy discovery only reads the account-qualified S3 bucket/state and never
-bootstraps or changes backend settings. A missing bucket, missing key, or empty
-Terraform state is a successful no-op; access failures fail closed. Terraform
-retains the state object and bucket after resource deletion. HML RDS deletion
-uses the existing `skip_final_snapshot = true` semantics, so **no final RDS
-snapshot is created**. Production database snapshot semantics are unchanged.
-Destroy tfvars contain the requested environment, `destroy_mode=true`, the AWS
-region, and VPC/subnet/ingress values recovered from existing DB state; destroy
-does not consume deploy-time GitHub variables. Normal apply still discovers
-network values from K8s remote state. Destroy therefore remains possible after
-K8s teardown, provided the DB state and referenced AWS network resources remain.
+A descoberta do destroy só lê o bucket/state do S3 qualificado pela conta e
+nunca faz bootstrap nem altera as configurações de backend. Um bucket
+ausente, uma chave ausente ou um Terraform state vazio são um no-op bem
+sucedido; falhas de acesso falham de forma fechada (fail closed). O
+Terraform mantém o objeto de state e o bucket após a exclusão dos recursos.
+A exclusão do RDS de HML usa a semântica existente de
+`skip_final_snapshot = true`, então **nenhum snapshot final do RDS é
+criado**. A semântica de snapshot do banco de produção não muda. As tfvars
+de destroy contêm o ambiente solicitado, `destroy_mode=true`, a região AWS,
+e os valores de VPC/subnet/ingress recuperados do state existente do banco;
+o destroy não consome as variáveis do GitHub usadas em tempo de deploy. O
+apply normal continua descobrindo os valores de rede a partir do remote
+state do K8s. Portanto, o destroy continua possível depois da destruição do
+K8s, desde que o state do banco e os recursos de rede AWS referenciados
+continuem existindo.
 
-## Naming
+## Nomenclatura
 
-`tc3-{resource}-{environment}` (for example, `tc3-db-hml`).
+`tc3-{resource}-{environment}` (por exemplo, `tc3-db-hml`).
