@@ -26,7 +26,7 @@ divergência de **versão** não resolvida entre os ambientes:
 ## Justificativa
 
 - Trocar de engine (por exemplo, para MySQL) significaria reescrever o
-  schema Prisma, todas as migrations, e revalidar toda a lógica de negócio
+  schema Prisma, todas as migrations e revalidar toda a lógica de negócio
   existente contra um dialeto SQL diferente — não existe justificativa para
   esse custo.
 - O PostgreSQL 16 já era o alvo da CI; alinhar o dev local e o RDS a essa

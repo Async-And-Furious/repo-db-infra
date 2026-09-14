@@ -14,7 +14,7 @@ ingress do PostgreSQL permanece somente por CIDR, a partir dos
 estreitos e nunca `0.0.0.0/0` ou `::/0`.
 
 O PROD seleciona subnets privadas a partir do remote state do K8s, não é
-publicamente acessível, e permite apenas o SG do consumidor EKS do remote
+publicamente acessível e permite apenas o SG do consumidor EKS do remote
 state mais os SGs de Lambda/consumidor explicitamente fornecidos. Inputs de
 subnet pública e de CIDR são rejeitados para o PROD; inputs do HML são
 rejeitados para o roteamento do PROD.

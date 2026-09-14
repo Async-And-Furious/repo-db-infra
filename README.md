@@ -7,9 +7,10 @@ permanecem privados.
 
 Este repositório é dono da instância RDS, do subnet group, do parameter
 group, do security group do banco, dos alarmes e da referência ao Secrets
-Manager. O `repo-k8s-infra` é dono da VPC; o remote state da RFC-004 é
-obrigatório. Ambos os ambientes consomem subnets privadas a partir dos
-outputs de remote state correspondentes do K8s. Os CIDRs permitidos do HML
+Manager. O `repo-k8s-infra` é dono da VPC; o consumo do remote state
+conforme a RFC-004 é obrigatório. Ambos os ambientes consomem subnets
+privadas a partir dos outputs correspondentes do remote state do K8s. Os
+CIDRs permitidos do HML
 são inputs explícitos por ambiente. As subnets privadas do K8s precisam
 cobrir pelo menos duas AZs, e os CIDRs permanecem estreitos (nunca
 `0.0.0.0/0`/`::/0`).
@@ -24,7 +25,8 @@ usar os outputs nomeados em vez de depender do formato do objeto.
 
 O RDS impõe `rds.force_ssl=1`; os clientes Lambda/Prisma precisam usar SSL. O
 consumidor monolito/auth, ainda em modo somente leitura, precisa de uma
-mudança de compatibilidade em um follow-up e não é alterado aqui. Veja a
+mudança de compatibilidade a ser feita em um follow-up e não é alterado
+aqui. Veja a
 [RFC-007](docs/rfcs/RFC-007-hml-public-rds-exception.md) e o
 [runbook de setup](docs/runbooks/aws-setup.md) para owner, prazo de
 expiração, secrets, backup, monitoramento e pré-requisitos de rollback.
@@ -38,7 +40,7 @@ terraform validate
 ```
 
 Esses comandos não precisam de credenciais AWS nem de remote state. Um plan
-real usa o Terraform state no S3, acesso AWS, e um state já aplicado do
+real usa o Terraform state no S3, acesso AWS e um state já aplicado do
 `repo-k8s-infra`:
 
 ```bash
@@ -123,8 +125,8 @@ final não colida.
 ### Destroy controlado
 
 `destroy-plan` e `destroy` são operações manuais. O HML continua disponível
-pelo workflow `down.yml` existente. A produção só está disponível
-disparando o `ci.yml` diretamente e é protegida pelo Environment protegido
+pelo workflow `down.yml` existente. A produção só fica disponível ao
+disparar o `ci.yml` diretamente e é protegida pelo Environment protegido
 `production`. Ambos exigem o input explícito `academy_mode=true` mais as
 três credenciais temporárias do AWS Academy. O destroy de produção exige a
 confirmação exata `DESTROY PROD`. O `destroy` também exige a confirmação
@@ -134,8 +136,8 @@ executa `terraform plan -destroy` e não o aplica.
 
 A descoberta do destroy só lê o bucket/state do S3 qualificado pela conta e
 nunca faz bootstrap nem altera as configurações de backend. Um bucket
-ausente, uma chave ausente ou um Terraform state vazio são um no-op bem
-sucedido; falhas de acesso falham de forma fechada (fail closed). O
+ausente, uma chave ausente ou um Terraform state vazio são um no-op
+bem-sucedido; falhas de acesso falham de forma fechada (fail closed). O
 Terraform mantém o objeto de state e o bucket após a exclusão dos recursos.
 A exclusão do RDS de HML usa a semântica existente de
 `skip_final_snapshot = true`, então **nenhum snapshot final do RDS é

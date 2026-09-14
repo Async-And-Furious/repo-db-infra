@@ -8,8 +8,10 @@
 
 ## Contexto
 
-O HANDOFF.md §6.1 sugeriu o `repo-k8s-infra` como dono da VPC, mas deixou
-isso sem confirmação. O Tech Challenge Fase 3 exige dois repositórios
+Um documento de planejamento anterior sugeriu o `repo-k8s-infra` como dono
+da VPC, mas deixou isso sem confirmação (referência histórica a um
+documento de planejamento — HANDOFF.md — não encontrado nos repositórios
+da organização). O Tech Challenge Fase 3 exige dois repositórios
 Terraform separados — um para a infraestrutura de Kubernetes, outro para o
 banco de dados gerenciado — e um banco de dados precisa estar dentro de
 alguma VPC/subnet, então exatamente um dos dois precisa ser dono da rede.
@@ -36,10 +38,10 @@ Terraform.
 ## Consequências
 
 - O `repo-k8s-infra` expõe os outputs `vpc_id`, `private_subnet_ids`,
-  `public_subnet_ids`, `cluster_name`, `ecr_repository_url` (conforme o
-  HANDOFF.md §5.2) para os repositórios downstream consumirem.
+  `public_subnet_ids`, `cluster_name`, `ecr_repository_url` para os
+  repositórios downstream consumirem.
 - O `repo-db-infra` precisa ser aplicado depois do `repo-k8s-infra` (ordem
-  de provisionamento conforme o HANDOFF.md §6.4: rede antes do banco de
+  de provisionamento definida por esta decisão: rede antes do banco de
   dados).
 - Os valores dos outputs são passados via um data source
   `terraform_remote_state` no `repo-db-infra` apontando para a chave de
