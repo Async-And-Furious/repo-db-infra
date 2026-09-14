@@ -56,6 +56,11 @@ variable "allowed_cidr_blocks" {
 }
 
 variable "publicly_accessible" { type = bool }
+variable "destroy_mode" {
+  description = "Allow the controlled destroy path to disable deletion protection"
+  type        = bool
+  default     = false
+}
 variable "alarm_cpu_threshold" { type = number }
 variable "alarm_free_storage_threshold_bytes" { type = number }
 variable "alarm_connections_threshold" { type = number }

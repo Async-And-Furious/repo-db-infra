@@ -1,5 +1,39 @@
 # Agent log
 
+## 2026-09-04 Private K8s-managed HML database subnets
+
+- Removed stale HML public subnet inputs. Normal DB applies now consume the
+  matching K8s remote-state VPC/private subnet outputs for both environments and
+  force RDS private access; HML CIDR and PROD security-group ingress controls
+  remain. No AWS apply was run.
+
+## 2026-09-04 Route-table-free production destroy fallback
+
+- Destroy mode no longer looks up subnet route tables, which may already be
+  removed by K8s teardown. Normal apply route-table discovery and its network
+  guardrails remain unchanged. No Terraform destroy was run.
+
+## 2026-09-04 Production destroy without K8s state
+
+- Changed destroy discovery to recover VPC, DB subnets, and environment-specific
+  ingress values from the existing DB Terraform state. Destroy mode skips the
+  K8s remote-state data source; normal apply discovery is unchanged. No destroy
+  or AWS apply was run.
+
+## 2026-09-04 Production destroy protection
+
+- Added an exact-confirmation, workflow-dispatch-only pre-destroy step that
+  safely resolves the environment DB from existing state (with deterministic
+  naming fallback), disables RDS deletion protection, and waits for availability
+  before creating and applying the destroy plan. No destroy was run.
+
+## 2026-09-04
+
+- Added guarded production destroy dispatch support using the protected
+  `production` Environment and exact `DESTROY PROD` confirmation. State discovery
+  now follows the requested environment, and destroy network inputs come from
+  K8s remote state without manual subnet variables. No destroy was run.
+
 ## 2026-08-22
 
 - Unified the database infrastructure changes on `unify/pr4-db` without
@@ -80,3 +114,9 @@
   environment to plan artifact names and apply downloads. Production approval
   and manual HML-only destroy semantics remain unchanged; no AWS apply/destroy,
   commit, or push was performed.
+
+## 2026-09-03
+
+- Reduced automated RDS backup retention to the AWS Free Tier maximum of one day
+  for both environments. Production privacy, multi-AZ, deletion protection and
+  final-snapshot protections are unchanged; no AWS apply was run.

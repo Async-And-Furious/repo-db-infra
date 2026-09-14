@@ -80,13 +80,14 @@ resource "aws_db_instance" "this" {
   vpc_security_group_ids = [aws_security_group.db.id]
   parameter_group_name   = aws_db_parameter_group.this.name
 
-  backup_retention_period    = local.is_prod ? 7 : 1
+  # AWS Free Tier permits at most one day of automated backups.
+  backup_retention_period    = local.is_prod ? 1 : 1
   auto_minor_version_upgrade = true
   multi_az                   = local.is_prod
 
   skip_final_snapshot       = !local.is_prod
   final_snapshot_identifier = local.is_prod ? "tc3-db-${var.environment}-final-${random_id.final_snapshot.hex}" : null
-  deletion_protection       = local.is_prod
+  deletion_protection       = local.is_prod && !var.destroy_mode
   copy_tags_to_snapshot     = true
 
   lifecycle {
@@ -95,8 +96,8 @@ resource "aws_db_instance" "this" {
       error_message = "RDS public exposure must match the explicitly selected environment policy."
     }
     precondition {
-      condition     = local.is_prod ? var.publicly_accessible == false : var.publicly_accessible == true
-      error_message = "HML must be public and PROD must be private; this exception is HML-only."
+      condition     = var.publicly_accessible == false
+      error_message = "RDS must remain private in every environment."
     }
   }
 }

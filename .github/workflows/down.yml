@@ -1,12 +1,18 @@
-name: Terraform HML Destroy (Confirmed)
+name: Terraform Destroy (Confirmed)
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: Type DESTROY HML to confirm deletion
+        description: Type DESTROY HML or DESTROY PROD to confirm deletion
         required: true
         type: string
+      environment:
+        description: Target environment
+        required: true
+        default: hml
+        type: choice
+        options: [hml, prod]
 
 permissions:
   contents: read
@@ -17,7 +23,7 @@ jobs:
     permissions:
       contents: read
     with:
-      environment: hml
+      environment: ${{ inputs.environment }}
       action: destroy
       academy_mode: false
       confirm: ${{ inputs.confirm }}

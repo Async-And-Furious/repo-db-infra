@@ -8,21 +8,39 @@ variable "environment" {
 }
 
 variable "destroy_mode" {
-  description = "Use live HML K8s remote-state network outputs for an HML-only destroy"
+  description = "Use DB-state network inputs during a controlled destroy"
   type        = bool
   default     = false
+}
+
+variable "destroy_vpc_id" {
+  description = "VPC ID recorded in the existing DB state for destroy mode"
+  type        = string
+  default     = ""
+}
+
+variable "destroy_subnet_ids" {
+  description = "DB subnet IDs recorded in the existing DB state for destroy mode"
+  type        = list(string)
+  default     = []
+}
+
+variable "destroy_allowed_security_group_ids" {
+  description = "PROD DB ingress security groups recorded in the existing DB state"
+  type        = list(string)
+  default     = []
+}
+
+variable "destroy_allowed_cidr_blocks" {
+  description = "HML DB ingress CIDRs recorded in the existing DB state"
+  type        = list(string)
+  default     = []
 }
 
 variable "aws_region" {
   description = "AWS region"
   type        = string
   default     = "us-east-1"
-}
-
-variable "hml_public_subnet_ids" {
-  description = "HML-only public subnet IDs, supplied per environment because the current K8s state does not publish them"
-  type        = list(string)
-  default     = []
 }
 
 variable "hml_allowed_cidr_blocks" {

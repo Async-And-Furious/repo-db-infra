@@ -1,23 +1,19 @@
 # RFC-007 — HML public RDS exception
 
-- **Status**: Selected HML-only exception for this implementation; not a general security baseline
+- **Status**: Superseded; HML is private like PROD
 - **Owner**: Tech Challenge infrastructure team
 - **Decision date**: 2026-08-23
-- **Scope**: `hml` only. PROD remains private and SG-only.
+- **Scope**: Historical HML exception; current policy covers HML and PROD.
 
 ## Decision and controls
 
-HML uses `publicly_accessible = true`, a subnet group made from explicitly
-supplied environment-scoped public subnet IDs, and PostgreSQL ingress only from
-the explicitly supplied `hml_allowed_cidr_blocks`. CIDRs must be narrow,
-well-formed, and never `0.0.0.0/0` or `::/0`; HML does not mix SG and CIDR
-sources. The supplied subnets must be public, have IGW routes, and span at
-least two Availability Zones. `repo-k8s-infra` remains the VPC owner and its
-remote state remains the VPC dependency; this repository never uses a default
-VPC.
+HML uses the private subnet IDs published by matching `repo-k8s-infra` remote
+state and `publicly_accessible = false`. PostgreSQL ingress remains CIDR only
+from the explicitly supplied `hml_allowed_cidr_blocks`; CIDRs must be narrow
+and never `0.0.0.0/0` or `::/0`.
 
-PROD selects private subnets from the K8s remote state (or an explicit private
-override), is not publicly accessible, and permits only the remote-state EKS
+PROD selects private subnets from the K8s remote state, is not publicly
+accessible, and permits only the remote-state EKS
 consumer SG plus explicitly supplied Lambda/consumer SGs. Public subnet and
 CIDR inputs are rejected for PROD; HML inputs are rejected for PROD routing.
 
@@ -45,8 +41,8 @@ CIDR inputs are rejected for PROD; HML inputs are rejected for PROD routing.
 
 ## Rollback
 
-Stop HML traffic, revoke or narrow `hml_allowed_cidr_blocks`, switch to a
-private subnet set, and apply only after client SSL compatibility is verified.
+Stop HML traffic, revoke or narrow `hml_allowed_cidr_blocks`, and apply only
+after client SSL compatibility is verified.
 Do not disable PROD protections or destroy shared infrastructure. The separate
 monolith PR #183 is not approval for this exception.
 
