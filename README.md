@@ -54,9 +54,9 @@ terraform plan -input=false
 
 O deploy do banco de dados e o deploy da aplicação são separados. Não existe
 chamada de API entre os repositórios: depois que o plan exato do banco é
-aplicado, um operador ou job de deploy, autenticado com as mesmas três
-credenciais temporárias do AWS Academy (`AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY` e `AWS_SESSION_TOKEN`), lê os outputs nomeados do
+aplicado, um operador ou job de deploy, autenticado com as mesmas
+credenciais do usuário IAM da conta AWS pessoal (`AWS_ACCESS_KEY_ID` e
+`AWS_SECRET_ACCESS_KEY`), lê os outputs nomeados do
 Terraform a partir do state específico do ambiente. Ele precisa buscar o
 `db_connection_secret_arn` com `secretsmanager:GetSecretValue` e combinar o
 `username` e a `password` retornados com `db_host`, `db_port`, `db_name` e
@@ -76,7 +76,7 @@ Os nomes e significados dos outputs são o contrato estável:
 
 Leia os outputs do state `hml` ou `prod` já selecionado; não misture state
 nem inputs de ambiente. O deploy da aplicação mantém o mesmo requisito de
-credenciais do Academy, e seus inputs de banco de dados são um handoff
+credenciais, e seus inputs de banco de dados são um handoff
 gerado, não uma API inventada entre repositórios.
 
 A CI escreve os inputs específicos de cada ambiente em um
@@ -96,10 +96,12 @@ plan e aplica automaticamente no HML; um push para `main` faz o plan e então
 aguarda a aprovação do Environment protegido `production` antes de aplicar
 no PROD. Applies manuais em PROD também exigem a confirmação explícita
 `APPLY PROD`. Todo apply baixa o artefato de plan do Terraform salvo pelo job
-de plan anterior. A CI aceita as três credenciais temporárias do AWS Academy
-juntas tanto para HML quanto para PROD; a produção não é exclusivamente
-OIDC. Credenciais, identidade do chamador, backend de state e inputs de rede
-entre repositórios são verificados antes do planejamento. O
+de plan anterior. A CI usa as mesmas credenciais de usuário IAM
+tanto para HML quanto para PROD; não há OIDC, e `AWS_SESSION_TOKEN` só entra
+se o secret estiver preenchido. O input `academy_mode` existe para contas AWS
+Academy e permanece em `false`, que é o padrão e o valor passado por `up.yml`
+e `down.yml`. Credenciais, identidade do chamador, backend de state e inputs
+de rede entre repositórios são verificados antes do planejamento. O
 `workflow_dispatch` seleciona HML ou PROD, e o Environment do GitHub
 selecionado (`hml` ou `production`) fornece os valores e credenciais
 específicos para o planejamento e o apply; a aprovação de produção continua
