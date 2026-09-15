@@ -1,9 +1,9 @@
 # RFC-007 — Exceção de RDS público no HML
 
-- **Status**: Superseded; o HML é privado, assim como o PROD
-- **Owner**: Time de infraestrutura do Tech Challenge
-- **Decision date**: 2026-08-23
-- **Scope**: Exceção histórica do HML; a política atual cobre HML e PROD.
+- **Status**: Superada; o HML é privado, assim como o PROD
+- **Responsável**: Time de infraestrutura do Tech Challenge
+- **Data da decisão**: 2026-08-23
+- **Escopo**: Exceção histórica do HML; a política atual cobre HML e PROD.
 
 ## Decisão e controles
 

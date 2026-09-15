@@ -1,7 +1,7 @@
 # RFC-004 — Ownership da VPC e outputs
 
-- **Status**: Accepted
-- **Date**: 2026-07-29
+- **Status**: Aceita
+- **Data**: 2026-07-29
 - **Source of truth**: este arquivo, em `async-furious-project`. Existem
   cópias em `repo-k8s-infra` e `repo-db-infra` apenas para visibilidade local
   — atualize aqui primeiro, depois sincronize.
