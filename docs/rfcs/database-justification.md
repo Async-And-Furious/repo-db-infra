@@ -2,54 +2,59 @@
 
 - **Status**: Accepted
 - **Date**: 2026-07-29
-- **Resolves**: HANDOFF.md §20, decision #6 ("Banco definitivo e versão")
-- **Source of truth**: this file, in `async-furious-project`. Copy exists in
-  `repo-db-infra` for local visibility — update here first, then sync.
+- **Resolves**: HANDOFF.md §20, decisão #6 ("Banco definitivo e versão")
+- **Source of truth**: este arquivo, em `async-furious-project`. Existe uma
+  cópia em `repo-db-infra` apenas para visibilidade local — atualize aqui
+  primeiro, depois sincronize.
 
-## Decision
+## Decisão
 
-**Amazon RDS for PostgreSQL 16**, provisioned via `repo-db-infra`
+**Amazon RDS for PostgreSQL 16**, provisionado via `repo-db-infra`
 (`modules/rds`).
 
-## Context
+## Contexto
 
-The engine was never actually open — the application already uses
-PostgreSQL exclusively via Prisma (`datasource db { provider = "postgresql" }`
-in `async-furious-project/prisma/schema.prisma`). The only real gap was an
-unresolved **version** mismatch across environments:
+A escolha do engine nunca esteve realmente em aberto — a aplicação já usa
+PostgreSQL exclusivamente via Prisma (`datasource db { provider = "postgresql" }`
+em `async-furious-project/prisma/schema.prisma`). O único gap real era uma
+divergência de **versão** não resolvida entre os ambientes:
 
 - CI (`tests.yml`, `zap.yml`): `postgres:16`
-- Local dev (`docker-compose.dependencies.yml`): `postgres:15-alpine`
-- RDS: undecided
+- Dev local (`docker-compose.dependencies.yml`): `postgres:15-alpine`
+- RDS: indefinido
 
-## Rationale
+## Justificativa
 
-- Switching engines (e.g. to MySQL) would mean rewriting the Prisma schema,
-  every migration, and re-validating all existing business logic against a
-  different SQL dialect — no justification exists for that cost.
-- PostgreSQL 16 was already the CI target; aligning local dev and RDS to it
-  removes a latent bug where code could pass locally against 15 and behave
-  differently in CI/prod against 16 (extension availability, planner
-  behavior, deprecated syntax).
-- RDS PostgreSQL is a fully managed engine on AWS, satisfying the "banco
-  gerenciado" requirement (§3.1/§3.4) directly, with built-in automated
-  backups, encryption at rest, and Multi-AZ failover for prod.
+- Trocar de engine (por exemplo, para MySQL) significaria reescrever o
+  schema Prisma, todas as migrations e revalidar toda a lógica de negócio
+  existente contra um dialeto SQL diferente — não existe justificativa para
+  esse custo.
+- O PostgreSQL 16 já era o alvo da CI; alinhar o dev local e o RDS a essa
+  versão remove um bug latente em que o código poderia passar localmente
+  contra a versão 15 e se comportar de forma diferente em CI/prod contra a
+  versão 16 (disponibilidade de extensões, comportamento do planner, sintaxe
+  descontinuada).
+- O RDS PostgreSQL é um engine totalmente gerenciado na AWS, atendendo
+  diretamente ao requisito de "banco gerenciado" (§3.1/§3.4), com backups
+  automatizados nativos, criptografia em repouso e failover Multi-AZ para
+  produção.
 
-## Consequences
+## Consequências
 
-- `docker-compose.dependencies.yml` updated to `postgres:16-alpine` to match
-  CI and RDS.
-- `repo-db-infra/modules/rds` provisions `aws_db_instance` with
-  `engine = "postgres"`, `engine_version = "16.4"`, `auto_minor_version_upgrade = true`
-  (patch versions are allowed to drift automatically; major version 16 is
-  pinned).
-- hml: `multi_az = false`, `skip_final_snapshot = true`, 1-day backup
-  retention (cheap, disposable).
-- prod: `multi_az = true`, `deletion_protection = true`, 7-day backup
-  retention.
-- Master password uses RDS-managed master user password
-  (`manage_master_user_password = true`): AWS generates and stores it in
-  Secrets Manager directly, never in Terraform state or a CI secret. The
-  Lambda's DB client reads it from Secrets Manager at runtime — how it
-  authenticates to fetch that secret (IAM role vs. static ARN reference)
-  is deferred to RFC-006 (secrets strategy), still open.
+- O `docker-compose.dependencies.yml` foi atualizado para `postgres:16-alpine`
+  para ficar alinhado com CI e RDS.
+- O `repo-db-infra/modules/rds` provisiona um `aws_db_instance` com
+  `engine = "postgres"`, `engine_version = "16.4"`,
+  `auto_minor_version_upgrade = true` (patch versions podem sofrer drift
+  automaticamente; a major version 16 é fixada).
+- hml: `multi_az = false`, `skip_final_snapshot = true`, retenção de backup
+  de 1 dia (barato, descartável).
+- prod: `multi_az = true`, `deletion_protection = true`, retenção de backup
+  de 7 dias.
+- A senha mestre usa o master user password gerenciado pelo RDS
+  (`manage_master_user_password = true`): a AWS gera e armazena a senha
+  diretamente no Secrets Manager, nunca no state do Terraform nem em um
+  secret de CI. O cliente de DB da Lambda lê a senha do Secrets Manager em
+  tempo de execução — como ela se autentica para buscar esse secret (IAM
+  role vs. referência estática de ARN) fica a cargo da RFC-006 (estratégia
+  de secrets), ainda em aberto.
