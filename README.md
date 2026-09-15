@@ -23,13 +23,14 @@ Valores de credencial nunca são outputs do Terraform. O `connection_contract`
 permanece disponível como um agregado retrocompatível; os consumidores devem
 usar os outputs nomeados em vez de depender do formato do objeto.
 
-O RDS impõe `rds.force_ssl=1`; os clientes Lambda/Prisma precisam usar SSL. O
-consumidor monolito/auth, ainda em modo somente leitura, precisa de uma
-mudança de compatibilidade a ser feita em um follow-up e não é alterado
-aqui. Veja a
-[RFC-007](docs/rfcs/RFC-007-hml-public-rds-exception.md) e o
-[runbook de setup](docs/runbooks/aws-setup.md) para owner, prazo de
-expiração, secrets, backup, monitoramento e pré-requisitos de rollback.
+O RDS impõe `rds.force_ssl=1`; os clientes precisam usar SSL. Os dois
+consumidores já cumprem: a aplicação monta a `DATABASE_URL` com o
+`db_ssl_mode` publicado por este repositório, e a Lambda de autenticação
+conecta com `sslmode=require`. A
+[RFC-007](docs/rfcs/RFC-007-hml-public-rds-exception.md) está superada (o HML
+não é mais público) e fica como registro histórico; os pré-requisitos atuais
+de secrets, backup, monitoramento e rollback estão no
+[runbook de setup](docs/runbooks/aws-setup.md).
 
 ## Validação local
 
@@ -124,15 +125,15 @@ final não colida.
 
 ### Destroy controlado
 
-`destroy-plan` e `destroy` são operações manuais. O HML continua disponível
-pelo workflow `down.yml` existente. A produção só fica disponível ao
-disparar o `ci.yml` diretamente e é protegida pelo Environment protegido
-`production`. Ambos exigem o input explícito `academy_mode=true` mais as
-três credenciais temporárias do AWS Academy. O destroy de produção exige a
-confirmação exata `DESTROY PROD`. O `destroy` também exige a confirmação
-exata `DESTROY HML` para HML ou `DESTROY PROD` para produção; ele salva um
-plan de destroy e aplica exatamente esse plan. O `destroy-plan` apenas
-executa `terraform plan -destroy` e não o aplica.
+`destroy-plan` e `destroy` são operações manuais, disponíveis para HML e PROD
+tanto disparando o `ci.yml` diretamente quanto pelo `down.yml`. A produção é
+protegida pelo Environment `production` e só é aceita em disparo manual. O
+guard exige `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY` (o
+`AWS_SESSION_TOKEN` é usado quando presente) e não depende de
+`academy_mode`. O `destroy` exige a confirmação exata `DESTROY HML` para HML
+ou `DESTROY PROD` para produção; ele salva um plan de destroy e aplica
+exatamente esse plan. O `destroy-plan` apenas executa
+`terraform plan -destroy` e não o aplica.
 
 A descoberta do destroy só lê o bucket/state do S3 qualificado pela conta e
 nunca faz bootstrap nem altera as configurações de backend. Um bucket
@@ -149,6 +150,15 @@ apply normal continua descobrindo os valores de rede a partir do remote
 state do K8s. Portanto, o destroy continua possível depois da destruição do
 K8s, desde que o state do banco e os recursos de rede AWS referenciados
 continuem existindo.
+
+## Workflows
+
+| Workflow | Disparo | O que faz |
+| --- | --- | --- |
+| `ci.yml` | pull request, push em `develop`/`main`, manual | Validação, plan, apply e destroy |
+| `up.yml` | manual | Apply de HML |
+| `down.yml` | manual | Destroy de HML ou PROD, com confirmação digitada |
+| `trivy.yml` | push, pull request, agendado | Scan de configuração IaC com gate em HIGH e CRITICAL |
 
 ## Nomenclatura
 
