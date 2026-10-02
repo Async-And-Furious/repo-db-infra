@@ -60,21 +60,32 @@ output "db_execucao_name" {
   value = module.service_secrets.database_names["execucao"]
 }
 
-output "dynamodb_os_table_name" {
-  value = module.dynamodb_read_model.os_table_name
+output "docdb_endpoint" {
+  description = "DocumentDB cluster endpoint of the OS Service read model"
+  value       = module.docdb_read_model.endpoint
 }
 
-output "dynamodb_cliente_table_name" {
-  value = module.dynamodb_read_model.cliente_table_name
+output "docdb_port" {
+  value = module.docdb_read_model.port
 }
 
-output "dynamodb_os_gsi_name" {
-  value = module.dynamodb_read_model.os_gsi_name
+output "docdb_name" {
+  description = "Database holding the read model collections"
+  value       = module.docdb_read_model.database_name
 }
 
-output "dynamodb_irsa_role_arn" {
-  description = "IAM role the OS Service service account (async-furious/os-service) assumes to reach DynamoDB"
-  value       = module.dynamodb_read_model.irsa_role_arn
+output "docdb_secret_arn" {
+  description = "Secrets Manager ARN of the DocumentDB credentials (JSON username/password/host/port/dbname)"
+  value       = module.docdb_read_model.secret_arn
+  sensitive   = true
+}
+
+output "docdb_os_collection_name" {
+  value = module.docdb_read_model.os_collection_name
+}
+
+output "docdb_cliente_collection_name" {
+  value = module.docdb_read_model.cliente_collection_name
 }
 
 output "connection_contract" {

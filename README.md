@@ -63,23 +63,28 @@ Outputs adicionados ou alterados:
 | `db_master_secret_arn` | master do RDS, **só** para o Job de bootstrap |
 | `db_billing_secret_arn`, `db_billing_name` | Billing |
 | `db_execucao_secret_arn`, `db_execucao_name` | Execução e Produção |
-| `dynamodb_os_table_name`, `dynamodb_cliente_table_name`, `dynamodb_os_gsi_name` | read model |
-| `dynamodb_irsa_role_arn` | role IRSA do OS Service |
+| `docdb_endpoint`, `docdb_port`, `docdb_name` | cluster DocumentDB do read model |
+| `docdb_secret_arn` | secret `tc3-docdb-os-<env>` (JSON `username/password/host/port/dbname`) |
+| `docdb_os_collection_name`, `docdb_cliente_collection_name` | coleções do read model |
 | `db_host`, `db_port`, `db_ssl_mode` | inalterados |
 
-### DynamoDB e IRSA
+### DocumentDB
 
-Tabelas `os-read-model-<env>` (GSI `gsi-fila-prioridade`) e
-`cliente-read-model-<env>`, `PAY_PER_REQUEST`. A role
-`tc3-os-service-dynamodb-<env>` confia no OIDC provider lido do remote state
-do `repo-k8s-infra` e só aceita o service account `async-furious/os-service`;
-a policy cobre apenas essas duas tabelas e o índice. A role não é criada
-quando o cluster não expõe OIDC provider (`oidc_provider_arn = null`). O
-pipeline do OS anota o service account com `dynamodb_irsa_role_arn`.
+Cluster `tc3-docdb-<env>` (engine `docdb` 5.0, uma instância `db.t4g.medium`,
+TLS obrigatório, storage criptografado) nas subnets privadas do
+`repo-k8s-infra`, com security group na porta 27017 e a mesma política de
+ingress do RDS (HML por CIDR, PROD por SG). O banco lógico é `os_read_model`,
+com as coleções `os_read_model` e `cliente_read_model`; coleções e índices
+(inclusive o índice parcial da fila por prioridade) são criados de forma
+idempotente pelo OS Service, não pelo Terraform. O acesso é por usuário e
+senha do secret `tc3-docdb-os-<env>`, via TLS (bundle de CA da AWS). **Não há
+IRSA.** Dívida aceita: o OS Service usa o usuário master do cluster, porque é
+o único consumidor. **Custo:** DocumentDB não tem free tier contínuo e a
+instância é cobrada por hora; em HML o `down.yml` destrói o cluster.
 
 ### Credenciais, state e artefatos
 
-- As senhas geradas ficam no state do Terraform (dívida aceita); o state
+- As senhas geradas (RDS e DocumentDB) ficam no state do Terraform (dívida aceita); o state
   fica no bucket S3 criptografado.
 - O artefato do `plan` contém essas senhas, por isso `retention-days: 1`.
 - O pipeline de deploy precisa de `secretsmanager:GetSecretValue` em
@@ -88,7 +93,7 @@ pipeline do OS anota o service account com `dynamodb_irsa_role_arn`.
 ### Runbook de recriação em HML
 
 1. Avisar o grupo da janela (login de cliente por CPF fica fora).
-2. `db-infra apply` (recria o RDS com `os_service`, cria secrets e DynamoDB).
+2. `db-infra apply` (recria o RDS com `os_service`, cria secrets e o cluster DocumentDB).
 3. Deploy do OS Service: Job de bootstrap, migration e seed.
 4. Validar o login por CPF (Lambda `authenticate-customer`) e subir Billing
    e Execução.

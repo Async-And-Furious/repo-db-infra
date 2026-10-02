@@ -132,13 +132,17 @@ module "service_secrets" {
   db_port     = module.rds.db_port
 }
 
-# ADR-0019: DynamoDB read model of the OS Service plus its IRSA role. The OIDC
-# provider comes from repo-k8s-infra (RFC-004: db reads k8s, never the inverse);
-# it is null in destroy mode and when the cluster has no provider.
-module "dynamodb_read_model" {
-  source = "./modules/dynamodb-read-model"
+# ADR-0019: DocumentDB read model of the OS Service. Same network ingress policy
+# as the RDS instance (HML by CIDR, PROD by security group). Access is by the
+# credentials in the secret, over TLS; there is no IAM/IRSA path.
+module "docdb_read_model" {
+  source = "./modules/docdb-read-model"
 
-  environment       = var.environment
-  oidc_provider_arn = var.destroy_mode ? null : try(data.terraform_remote_state.k8s_infra[0].outputs.oidc_provider_arn, null)
-  oidc_issuer_url   = var.destroy_mode ? null : try(data.terraform_remote_state.k8s_infra[0].outputs.cluster_oidc_issuer_url, null)
+  environment                = var.environment
+  vpc_id                     = local.vpc_id
+  subnet_ids                 = local.subnet_ids
+  allowed_security_group_ids = local.allowed_security_group_ids
+  allowed_cidr_blocks        = local.allowed_cidr_blocks
+  final_snapshot_revision    = var.final_snapshot_revision
+  destroy_mode               = var.destroy_mode
 }
