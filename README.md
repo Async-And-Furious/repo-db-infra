@@ -32,6 +32,67 @@ não é mais público) e fica como registro histórico; os pré-requisitos atuai
 de secrets, backup, monitoramento e rollback estão no
 [runbook de setup](docs/runbooks/aws-setup.md).
 
+## Bancos por serviço e read model (Feature #315)
+
+A instância `tc3-db-${environment}` é única, com **banco, role e secret por
+serviço** (ADR-0020). O `db_name` da instância passou de `workshop` para
+`os_service`, o que **recria a instância**; em HML os dados são descartados e
+migrations/seed são reaplicados. Faça a recriação numa janela única,
+avisando o grupo.
+
+| Serviço | Banco | Role | Secret |
+| --- | --- | --- | --- |
+| OS Service | `os_service` | `os_service_app` | `tc3-db-os-<env>` |
+| Billing | `billing` | `billing_app` | `tc3-db-billing-<env>` |
+| Execução e Produção | `execucao_producao` | `execucao_app` | `tc3-db-execucao-<env>` |
+
+Cada secret é um JSON `{username,password,host,port,dbname}` com senha de
+`random_password`. Este repositório só cria os secrets: os bancos e as roles
+são criados pelo `Job` de bootstrap, idempotente, que roda dentro da VPC no
+pipeline do OS Service (`scripts/db-bootstrap/` no `async-furious-project`).
+Não há provider `postgresql` no Terraform: o RDS é privado e o CI roda em
+`ubuntu-latest`. Consequência: Billing e Execução só sobem depois do 1º
+deploy do OS.
+
+Outputs adicionados ou alterados:
+
+| Output | Valor |
+| --- | --- |
+| `db_connection_secret_arn`, `db_secret_arn` (legado) | secret do **OS Service** |
+| `db_name` | `os_service` |
+| `db_master_secret_arn` | master do RDS, **só** para o Job de bootstrap |
+| `db_billing_secret_arn`, `db_billing_name` | Billing |
+| `db_execucao_secret_arn`, `db_execucao_name` | Execução e Produção |
+| `dynamodb_os_table_name`, `dynamodb_cliente_table_name`, `dynamodb_os_gsi_name` | read model |
+| `dynamodb_irsa_role_arn` | role IRSA do OS Service |
+| `db_host`, `db_port`, `db_ssl_mode` | inalterados |
+
+### DynamoDB e IRSA
+
+Tabelas `os-read-model-<env>` (GSI `gsi-fila-prioridade`) e
+`cliente-read-model-<env>`, `PAY_PER_REQUEST`. A role
+`tc3-os-service-dynamodb-<env>` confia no OIDC provider lido do remote state
+do `repo-k8s-infra` e só aceita o service account `async-furious/os-service`;
+a policy cobre apenas essas duas tabelas e o índice. A role não é criada
+quando o cluster não expõe OIDC provider (`oidc_provider_arn = null`). O
+pipeline do OS anota o service account com `dynamodb_irsa_role_arn`.
+
+### Credenciais, state e artefatos
+
+- As senhas geradas ficam no state do Terraform (dívida aceita); o state
+  fica no bucket S3 criptografado.
+- O artefato do `plan` contém essas senhas, por isso `retention-days: 1`.
+- O pipeline de deploy precisa de `secretsmanager:GetSecretValue` em
+  `tc3-db-*` e `db_master_secret_arn`.
+
+### Runbook de recriação em HML
+
+1. Avisar o grupo da janela (login de cliente por CPF fica fora).
+2. `db-infra apply` (recria o RDS com `os_service`, cria secrets e DynamoDB).
+3. Deploy do OS Service: Job de bootstrap, migration e seed.
+4. Validar o login por CPF (Lambda `authenticate-customer`) e subir Billing
+   e Execução.
+
 ## Validação local
 
 ```bash

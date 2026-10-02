@@ -145,7 +145,7 @@ jobs:
         with:
           name: terraform-plan-${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}-${{ github.run_id }}
           path: terraform.tfplan
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: error
       - if: always()
         run: rm -f terraform.auto.tfvars.json backend.hcl terraform.tfplan

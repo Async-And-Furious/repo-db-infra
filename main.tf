@@ -120,3 +120,25 @@ module "rds" {
   final_snapshot_revision            = var.final_snapshot_revision
   destroy_mode                       = var.destroy_mode
 }
+
+# ADR-0020: one database, role and secret per service on the single instance.
+# The databases and roles are created by the bootstrap Job in the OS Service
+# pipeline (no postgresql provider; the RDS is private and CI runs outside it).
+module "service_secrets" {
+  source = "./modules/service-secrets"
+
+  environment = var.environment
+  db_host     = module.rds.db_host
+  db_port     = module.rds.db_port
+}
+
+# ADR-0019: DynamoDB read model of the OS Service plus its IRSA role. The OIDC
+# provider comes from repo-k8s-infra (RFC-004: db reads k8s, never the inverse);
+# it is null in destroy mode and when the cluster has no provider.
+module "dynamodb_read_model" {
+  source = "./modules/dynamodb-read-model"
+
+  environment       = var.environment
+  oidc_provider_arn = var.destroy_mode ? null : try(data.terraform_remote_state.k8s_infra[0].outputs.oidc_provider_arn, null)
+  oidc_issuer_url   = var.destroy_mode ? null : try(data.terraform_remote_state.k8s_infra[0].outputs.cluster_oidc_issuer_url, null)
+}
