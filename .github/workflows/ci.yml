@@ -145,7 +145,7 @@ jobs:
         with:
           name: terraform-plan-${{ inputs.environment == 'prod' && 'production' || inputs.environment || (github.ref_name == 'main' && 'production' || 'hml') }}-${{ github.run_id }}
           path: terraform.tfplan
-          retention-days: 7
+          retention-days: 1
           if-no-files-found: error
       - if: always()
         run: rm -f terraform.auto.tfvars.json backend.hcl terraform.tfplan
@@ -281,6 +281,19 @@ jobs:
             --no-deletion-protection
           aws rds wait db-instance-available \
             --db-instance-identifier "$DB_IDENTIFIER"
+      - name: Disable DocumentDB deletion protection before confirmed destroy
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.action == 'destroy' &&
+          inputs.environment == 'prod' && inputs.confirm == 'DESTROY PROD' &&
+          steps.destroy-backend.outputs.state_exists == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cluster="tc3-docdb-${{ inputs.environment }}"
+          if aws docdb describe-db-clusters --db-cluster-identifier "$cluster" >/dev/null 2>&1; then
+            aws docdb modify-db-cluster --db-cluster-identifier "$cluster" --no-deletion-protection --apply-immediately
+          fi
       - run: terraform plan -destroy -input=false
         if: inputs.action == 'destroy-plan' && steps.destroy-backend.outputs.state_exists == 'true'
       - run: terraform plan -destroy -input=false -out=destroy.tfplan

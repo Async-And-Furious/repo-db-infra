@@ -21,7 +21,7 @@ output "master_user_secret_arn" {
 }
 
 output "connection_contract" {
-  description = "Application handoff: RDS endpoint metadata, required TLS mode, and the RDS-managed secret reference"
+  description = "Instance metadata and the RDS-managed master secret reference (bootstrap only)"
   value = {
     host              = aws_db_instance.this.address
     port              = aws_db_instance.this.port

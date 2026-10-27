@@ -71,7 +71,7 @@ resource "aws_db_instance" "this" {
   storage_encrypted   = true
   publicly_accessible = var.publicly_accessible
 
-  db_name  = "workshop"
+  db_name  = "os_service"
   username = "postgres"
   # RDS-managed master password (Secrets Manager), never in Terraform state.
   manage_master_user_password = true

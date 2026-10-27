@@ -32,6 +32,72 @@ não é mais público) e fica como registro histórico; os pré-requisitos atuai
 de secrets, backup, monitoramento e rollback estão no
 [runbook de setup](docs/runbooks/aws-setup.md).
 
+## Bancos por serviço e read model (Feature #315)
+
+A instância `tc3-db-${environment}` é única, com **banco, role e secret por
+serviço** (ADR-0020). O `db_name` da instância passou de `workshop` para
+`os_service`, o que **recria a instância**; em HML os dados são descartados e
+migrations/seed são reaplicados. Faça a recriação numa janela única,
+avisando o grupo.
+
+| Serviço | Banco | Role | Secret |
+| --- | --- | --- | --- |
+| OS Service | `os_service` | `os_service_app` | `tc3-db-os-<env>` |
+| Billing | `billing` | `billing_app` | `tc3-db-billing-<env>` |
+| Execução e Produção | `execucao_producao` | `execucao_app` | `tc3-db-execucao-<env>` |
+
+Cada secret é um JSON `{username,password,host,port,dbname}` com senha de
+`random_password`. Este repositório só cria os secrets: os bancos e as roles
+são criados pelo `Job` de bootstrap, idempotente, que roda dentro da VPC no
+pipeline do OS Service (`scripts/db-bootstrap/` no `async-furious-project`).
+Não há provider `postgresql` no Terraform: o RDS é privado e o CI roda em
+`ubuntu-latest`. Consequência: Billing e Execução só sobem depois do 1º
+deploy do OS.
+
+Outputs adicionados ou alterados:
+
+| Output | Valor |
+| --- | --- |
+| `db_connection_secret_arn`, `db_secret_arn` (legado) | secret do **OS Service** |
+| `db_name` | `os_service` |
+| `db_master_secret_arn` | master do RDS, **só** para o Job de bootstrap |
+| `db_billing_secret_arn`, `db_billing_name` | Billing |
+| `db_execucao_secret_arn`, `db_execucao_name` | Execução e Produção |
+| `docdb_endpoint`, `docdb_port`, `docdb_name` | cluster DocumentDB do read model |
+| `docdb_secret_arn` | secret `tc3-docdb-os-<env>` (JSON `username/password/host/port/dbname`) |
+| `docdb_os_collection_name`, `docdb_cliente_collection_name` | coleções do read model |
+| `db_host`, `db_port`, `db_ssl_mode` | inalterados |
+
+### DocumentDB
+
+Cluster `tc3-docdb-<env>` (engine `docdb` 5.0, uma instância `db.t4g.medium`,
+TLS obrigatório, storage criptografado) nas subnets privadas do
+`repo-k8s-infra`, com security group na porta 27017 e a mesma política de
+ingress do RDS (HML por CIDR, PROD por SG). O banco lógico é `os_read_model`,
+com as coleções `os_read_model` e `cliente_read_model`; coleções e índices
+(inclusive o índice parcial da fila por prioridade) são criados de forma
+idempotente pelo OS Service, não pelo Terraform. O acesso é por usuário e
+senha do secret `tc3-docdb-os-<env>`, via TLS (bundle de CA da AWS). **Não há
+IRSA.** Dívida aceita: o OS Service usa o usuário master do cluster, porque é
+o único consumidor. **Custo:** DocumentDB não tem free tier contínuo e a
+instância é cobrada por hora; em HML o `down.yml` destrói o cluster.
+
+### Credenciais, state e artefatos
+
+- As senhas geradas (RDS e DocumentDB) ficam no state do Terraform (dívida aceita); o state
+  fica no bucket S3 criptografado.
+- O artefato do `plan` contém essas senhas, por isso `retention-days: 1`.
+- O pipeline de deploy precisa de `secretsmanager:GetSecretValue` em
+  `tc3-db-*` e `db_master_secret_arn`.
+
+### Runbook de recriação em HML
+
+1. Avisar o grupo da janela (login de cliente por CPF fica fora).
+2. `db-infra apply` (recria o RDS com `os_service`, cria secrets e o cluster DocumentDB).
+3. Deploy do OS Service: Job de bootstrap, migration e seed.
+4. Validar o login por CPF (Lambda `authenticate-customer`) e subir Billing
+   e Execução.
+
 ## Validação local
 
 ```bash
