@@ -64,7 +64,7 @@ resource "aws_security_group" "db" {
 resource "aws_db_instance" "this" {
   identifier     = "tc3-db-${var.environment}"
   engine         = "postgres"
-  engine_version = "16.4"
+  engine_version = "16.15"
 
   instance_class      = var.instance_class
   allocated_storage   = var.allocated_storage
