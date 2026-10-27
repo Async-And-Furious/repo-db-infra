@@ -1,122 +1,138 @@
 # Agent log
 
-## 2026-09-04 Private K8s-managed HML database subnets
+## 2026-09-04 Subnets privadas do banco de HML gerenciadas pelo K8s
 
-- Removed stale HML public subnet inputs. Normal DB applies now consume the
-  matching K8s remote-state VPC/private subnet outputs for both environments and
-  force RDS private access; HML CIDR and PROD security-group ingress controls
-  remain. No AWS apply was run.
+- Removidos os inputs obsoletos de subnet pública do HML. Os applies normais
+  de DB agora consomem os outputs de VPC/subnet privada do remote state do
+  K8s correspondente para ambos os ambientes e forçam o acesso privado do
+  RDS; o CIDR do HML e os controles de ingress via security group do PROD
+  permanecem. Nenhum apply na AWS foi executado.
 
-## 2026-09-04 Route-table-free production destroy fallback
+## 2026-09-04 Fallback de destroy de produção sem lookup de route table
 
-- Destroy mode no longer looks up subnet route tables, which may already be
-  removed by K8s teardown. Normal apply route-table discovery and its network
-  guardrails remain unchanged. No Terraform destroy was run.
+- O modo destroy não consulta mais as route tables das subnets, que já podem
+  ter sido removidas pelo teardown do K8s. A descoberta de route table do
+  apply normal e suas guardrails de rede permanecem inalteradas. Nenhum
+  destroy do Terraform foi executado.
 
-## 2026-09-04 Production destroy without K8s state
+## 2026-09-04 Destroy de produção sem o state do K8s
 
-- Changed destroy discovery to recover VPC, DB subnets, and environment-specific
-  ingress values from the existing DB Terraform state. Destroy mode skips the
-  K8s remote-state data source; normal apply discovery is unchanged. No destroy
-  or AWS apply was run.
+- Alterada a descoberta do destroy para recuperar VPC, subnets do DB e
+  valores de ingress específicos do ambiente a partir do state existente do
+  Terraform do DB. O modo destroy pula o data source de remote state do K8s;
+  a descoberta do apply normal permanece inalterada. Nenhum destroy ou apply
+  na AWS foi executado.
 
-## 2026-09-04 Production destroy protection
+## 2026-09-04 Proteção do destroy de produção
 
-- Added an exact-confirmation, workflow-dispatch-only pre-destroy step that
-  safely resolves the environment DB from existing state (with deterministic
-  naming fallback), disables RDS deletion protection, and waits for availability
-  before creating and applying the destroy plan. No destroy was run.
+- Adicionado um passo de pré-destroy, exclusivo do workflow_dispatch e com
+  confirmação exata, que resolve com segurança o DB do ambiente a partir do
+  state existente (com fallback determinístico de nomenclatura), desabilita
+  a proteção contra exclusão do RDS e aguarda a disponibilidade antes de
+  criar e aplicar o plan de destroy. Nenhum destroy foi executado.
 
 ## 2026-09-04
 
-- Added guarded production destroy dispatch support using the protected
-  `production` Environment and exact `DESTROY PROD` confirmation. State discovery
-  now follows the requested environment, and destroy network inputs come from
-  K8s remote state without manual subnet variables. No destroy was run.
+- Adicionado suporte guiado ao dispatch de destroy de produção usando o
+  Environment protegido `production` e a confirmação exata `DESTROY PROD`. A
+  descoberta de state agora segue o ambiente solicitado, e os inputs de rede
+  do destroy vêm do remote state do K8s sem variáveis manuais de subnet.
+  Nenhum destroy foi executado.
 
 ## 2026-08-22
 
-- Unified the database infrastructure changes on `unify/pr4-db` without
-  applying, committing, pushing, or merging.
-- Validation used `terraform fmt -recursive`, backend-free init/validate and
-  `git diff --check`; a real plan was not run because the remote backend and
-  AWS state prerequisites are unavailable.
+- Unificadas as mudanças de infraestrutura de banco de dados em
+  `unify/pr4-db` sem aplicar, commitar, dar push ou fazer merge.
+- A validação usou `terraform fmt -recursive`, init/validate sem backend e
+  `git diff --check`; um plan real não foi executado porque o backend remoto
+  e os pré-requisitos de state da AWS não estavam disponíveis.
 
 ## 2026-08-23
 
-- Selected RFC-007 for HML only: public subnets plus explicit validated CIDRs;
-  PROD remains private and SG-only. Added SSL enforcement, alarms, and
-  environment-scoped input fail-closed checks without applying or committing.
-- Validation used Terraform formatting, backend-free init/validate, workflow
-  YAML parsing, and `git diff --check`; no AWS plan/apply was run.
+- Selecionada a RFC-007 apenas para HML: subnets públicas mais CIDRs
+  explícitos e validados; o PROD permanece privado e somente por SG.
+  Adicionados enforcement de SSL, alarmes e verificações fail-closed de
+  inputs específicos por ambiente, sem aplicar ou commitar.
+- A validação usou formatação do Terraform, init/validate sem backend,
+  parsing de YAML dos workflows e `git diff --check`; nenhum plan/apply na
+  AWS foi executado.
 
-## 2026-08-23 Oracle Gate follow-up
+## 2026-08-23 Follow-up do Oracle Gate
 
-- Routed environment-scoped CI variables fail closed, added subnet AZ/IGW route
-  preconditions, and replaced stable snapshot randomness with an explicit
-  revision nonce. No AWS plan/apply, commit, push, merge, or other repository
-  changes were performed.
-- Validation used `terraform fmt -recursive`, backend-free init/validate,
-  workflow YAML duplicate-key parsing, and `git diff --check`.
+- As variáveis de CI específicas por ambiente agora falham de forma fechada
+  (fail closed); adicionadas preconditions de AZ/route de IGW para subnets, e
+  substituída a aleatoriedade estável de snapshot por um nonce de revisão
+  explícito. Nenhum plan/apply na AWS, commit, push, merge ou outra mudança
+  no repositório foi realizado.
+- A validação usou `terraform fmt -recursive`, init/validate sem backend,
+  parsing de chave duplicada em YAML dos workflows e `git diff --check`.
 
 ## 2026-08-24
 
-- Switched database state from S3/DynamoDB to HCP Terraform state-only workspaces
-  `tc3-db-hml` and `tc3-db-prod` with local execution. Updated CI token/backend
-  configuration and documented the controlled state migration; no apply,
-  commit, or push was performed.
+- Alterado o state do banco de dados de S3/DynamoDB para workspaces
+  somente-state do HCP Terraform `tc3-db-hml` e `tc3-db-prod`, com execução
+  local. Atualizada a configuração de token/backend da CI e documentada a
+  migração controlada de state; nenhum apply, commit ou push foi realizado.
 
-## 2026-08-24 HCP backend correction
+## 2026-08-24 Correção do backend do HCP
 
-- Configured the root remote backend for the HML workspace and removed invalid
-  remote backend CLI overrides from CI and migration documentation.
+- Configurado o backend remoto raiz para o workspace de HML e removidos
+  overrides inválidos de backend remoto via CLI da CI e da documentação de
+  migração.
 
-## 2026-08-24 Remote local execution
+## 2026-08-24 Execução local remota
 
-- Updated plan/apply CI jobs to generate temporary auto tfvars JSON, run plans
-  without `-out`, and apply directly; removed plan artifacts. No apply was run.
-- Validation used Terraform formatting, backend-free init/validate, workflow YAML
-  parsing, and `git diff --check`.
+- Atualizados os jobs de CI de plan/apply para gerar um JSON temporário de
+  auto tfvars, executar plans sem `-out` e aplicar diretamente; removidos os
+  artefatos de plan. Nenhum apply foi executado.
+- A validação usou formatação do Terraform, init/validate sem backend,
+  parsing de YAML dos workflows e `git diff --check`.
 
 ## 2026-08-26
 
-- Shortened workflow dispatch applies to run directly after validation; plan runs
-  only for `action=plan`. No Terraform apply was run.
+- Reduzidos os applies de dispatch manual do workflow para executar
+  diretamente após a validação; o plan só roda para `action=plan`. Nenhum
+  apply do Terraform foi executado.
 
 ## 2026-08-30
 
-- Aligned CI with the confirmed AWS Academy lifecycle for both HML and PROD:
-  complete temporary credentials are required, the protected production
-  Environment gates only the saved-plan apply, and HML destroy remains manual.
-  Clarified the RDS application connection contract with `ssl_mode=require` and
-  updated stale RFC/runbook references. No AWS/Terraform apply or destroy was run.
+- Alinhada a CI com o ciclo de vida confirmado do AWS Academy para HML e
+  PROD: credenciais temporárias completas são obrigatórias, o Environment
+  protegido de produção protege apenas o apply do plan salvo, e o destroy de
+  HML permanece manual. Esclarecido o contrato de conexão da aplicação com o
+  RDS usando `ssl_mode=require` e atualizadas referências desatualizadas em
+  RFCs/runbooks. Nenhum apply ou destroy do Terraform/AWS foi executado.
 
 ## 2026-08-29
 
-- Updated CI for the AWS Academy lifecycle: `develop` automatically deploys HML,
-  `main` requires the protected PROD Environment, and apply consumes a saved
-  Terraform plan artifact. Added credential/state preflight and an explicit
-  cross-repository network-input validator. HML destroy remains manual, guarded,
-  and HML-only; no AWS/Terraform apply or destroy was run.
+- Atualizada a CI para o ciclo de vida do AWS Academy: `develop` faz o deploy
+  automático do HML, `main` exige o Environment protegido de PROD, e o apply
+  consome um artefato de plan do Terraform salvo. Adicionados preflight de
+  credencial/state e um validador explícito de inputs de rede entre
+  repositórios. O destroy de HML permanece manual, protegido e restrito ao
+  HML; nenhum apply ou destroy do Terraform/AWS foi executado.
 
-## 2026-08-30 Application connection handoff
+## 2026-08-30 Handoff de conexão para a aplicação
 
-- Exposed explicitly named RDS application outputs for reproducible consumption:
-  host, port, database, required SSL mode, and the RDS-managed Secrets Manager
-  ARN. Documented the Academy-credentialed runtime fetch/build handoff without
-  adding cross-repository API calls. HML/PROD separation, protected production
-  exact-plan approval, and HML-only destroy are unchanged; no apply or destroy
-  was run.
+- Expostos outputs explicitamente nomeados do RDS para consumo reprodutível
+  pela aplicação: host, porta, banco de dados, modo SSL obrigatório e o ARN
+  do Secrets Manager gerenciado pelo RDS. Documentado o handoff de
+  busca/montagem em tempo de execução com credenciais do Academy, sem
+  adicionar chamadas de API entre repositórios. A separação HML/PROD, a
+  aprovação de plan exato protegida de produção e o destroy restrito ao HML
+  permanecem inalterados; nenhum apply ou destroy foi executado.
 
-## 2026-08-31 Workflow environment binding
+## 2026-08-31 Vínculo do Environment do workflow
 
-- Bound plan to the dynamically selected GitHub Environment and added that
-  environment to plan artifact names and apply downloads. Production approval
-  and manual HML-only destroy semantics remain unchanged; no AWS apply/destroy,
-  commit, or push was performed.
+- O plan agora é vinculado ao Environment do GitHub selecionado
+  dinamicamente, e esse ambiente foi adicionado aos nomes dos artefatos de
+  plan e aos downloads do apply. A aprovação de produção e a semântica de
+  destroy manual restrito ao HML permanecem inalteradas; nenhum apply/destroy
+  na AWS, commit ou push foi realizado.
 
 ## 2026-09-03
 
-- Reduced automated RDS backup retention to the AWS Free Tier maximum of one day
-  for both environments. Production privacy, multi-AZ, deletion protection and
-  final-snapshot protections are unchanged; no AWS apply was run.
+- Reduzida a retenção automática de backup do RDS para o máximo do AWS Free
+  Tier, um dia, em ambos os ambientes. A privacidade, o Multi-AZ, a proteção
+  contra exclusão e as proteções de snapshot final da produção permanecem
+  inalteradas; nenhum apply na AWS foi executado.

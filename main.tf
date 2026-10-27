@@ -120,3 +120,29 @@ module "rds" {
   final_snapshot_revision            = var.final_snapshot_revision
   destroy_mode                       = var.destroy_mode
 }
+
+# ADR-0020: one database, role and secret per service on the single instance.
+# The databases and roles are created by the bootstrap Job in the OS Service
+# pipeline (no postgresql provider; the RDS is private and CI runs outside it).
+module "service_secrets" {
+  source = "./modules/service-secrets"
+
+  environment = var.environment
+  db_host     = module.rds.db_host
+  db_port     = module.rds.db_port
+}
+
+# ADR-0019: DocumentDB read model of the OS Service. Same network ingress policy
+# as the RDS instance (HML by CIDR, PROD by security group). Access is by the
+# credentials in the secret, over TLS; there is no IAM/IRSA path.
+module "docdb_read_model" {
+  source = "./modules/docdb-read-model"
+
+  environment                = var.environment
+  vpc_id                     = local.vpc_id
+  subnet_ids                 = local.subnet_ids
+  allowed_security_group_ids = local.allowed_security_group_ids
+  allowed_cidr_blocks        = local.allowed_cidr_blocks
+  final_snapshot_revision    = var.final_snapshot_revision
+  destroy_mode               = var.destroy_mode
+}
